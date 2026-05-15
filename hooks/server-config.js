@@ -11,6 +11,8 @@ const SERVER_PORTS = Array.from({ length: SERVER_PORT_COUNT }, (_, i) => DEFAULT
 const STATE_PATH = "/state";
 const PERMISSION_PATH = "/permission";
 const RUNTIME_CONFIG_PATH = path.join(os.homedir(), ".clawd", "runtime.json");
+const DEFAULT_HOOK_HTTP_TIMEOUT_MS = 100;
+const REMOTE_HOOK_HTTP_TIMEOUT_MS = 5000;
 
 function normalizePort(value) {
   const port = Number(value);
@@ -140,6 +142,42 @@ function isClawdResponse(res, body) {
   }
 }
 
+function isRemoteHookMode(options = {}) {
+  if (options.remote === true) return true;
+  if (options.remote === false) return false;
+  const env = options.env || process.env;
+  const value = env && env.CLAWD_REMOTE;
+  if (!value) return false;
+  return !/^(0|false)$/i.test(String(value));
+}
+
+function normalizeHookHttpTimeout(value, fallback, options = {}) {
+  const n = Number(value);
+  const requested = Number.isFinite(n) && n > 0 ? n : fallback;
+  return isRemoteHookMode(options)
+    ? Math.max(requested, REMOTE_HOOK_HTTP_TIMEOUT_MS)
+    : requested;
+}
+
+function getStatePostTimeoutMs(options = {}) {
+  return normalizeHookHttpTimeout(
+    options.timeoutMs,
+    DEFAULT_HOOK_HTTP_TIMEOUT_MS,
+    options
+  );
+}
+
+function getPermissionProbeTimeoutMs(options = {}) {
+  // Permission discovery also crosses the reverse tunnel in remote mode.
+  // This can make the all-ports-dead path slower, but avoids missing a
+  // healthy local Clawd behind a high-latency tunnel.
+  return normalizeHookHttpTimeout(
+    options.probeTimeoutMs,
+    DEFAULT_HOOK_HTTP_TIMEOUT_MS,
+    options
+  );
+}
+
 function probePort(port, timeoutMs, callback, options = {}) {
   const httpGet = options.httpGet || http.get;
   const req = httpGet(
@@ -200,7 +238,7 @@ function postStateToPort(port, payload, timeoutMs, callback, options = {}) {
 }
 
 function discoverClawdPort(options, callback) {
-  const timeoutMs = options && options.timeoutMs ? options.timeoutMs : 100;
+  const timeoutMs = options && options.timeoutMs ? options.timeoutMs : DEFAULT_HOOK_HTTP_TIMEOUT_MS;
   const ports = getPortCandidates(options && options.preferredPort, options);
   const probe = options && options.probePort ? options.probePort : probePort;
   let index = 0;
@@ -225,7 +263,7 @@ function discoverClawdPort(options, callback) {
 }
 
 function postStateToRunningServer(body, options, callback) {
-  const timeoutMs = options && options.timeoutMs ? options.timeoutMs : 100;
+  const timeoutMs = getStatePostTimeoutMs(options || {});
   const payload = typeof body === "string" ? body : JSON.stringify(body);
   const { direct, fallback } = splitPortCandidates(options && options.preferredPort, options);
   const probe = options && options.probePort ? options.probePort : probePort;
@@ -317,7 +355,7 @@ function postPermissionToPort(port, payload, timeoutMs, callback, options = {}) 
 
 function postPermissionToRunningServer(body, options, callback) {
   const timeoutMs = options && options.timeoutMs ? options.timeoutMs : 590000;
-  const probeTimeoutMs = options && options.probeTimeoutMs ? options.probeTimeoutMs : 100;
+  const probeTimeoutMs = getPermissionProbeTimeoutMs(options || {});
   const payload = typeof body === "string" ? body : JSON.stringify(body);
   const discover = options && options.discoverClawdPort ? options.discoverClawdPort : discoverClawdPort;
   const post = options && options.postPermissionToPort ? options.postPermissionToPort : postPermissionToPort;
@@ -631,8 +669,10 @@ async function resolveNodeBinAsync(options = {}) {
 module.exports = {
   CLAWD_SERVER_HEADER,
   CLAWD_SERVER_ID,
+  DEFAULT_HOOK_HTTP_TIMEOUT_MS,
   DEFAULT_SERVER_PORT,
   PERMISSION_PATH,
+  REMOTE_HOOK_HTTP_TIMEOUT_MS,
   RUNTIME_CONFIG_PATH,
   SERVER_PORTS,
   STATE_PATH,
@@ -640,6 +680,8 @@ module.exports = {
   clearRuntimeConfig,
   discoverClawdPort,
   getPortCandidates,
+  getPermissionProbeTimeoutMs,
+  getStatePostTimeoutMs,
   postPermissionToPort,
   postPermissionToRunningServer,
   postStateToRunningServer,

@@ -378,4 +378,155 @@ describe("server-config helpers", () => {
     });
   });
 
+  it("postStateToRunningServer raises short timeouts in CLAWD_REMOTE mode", async () => {
+    const timeouts = [];
+
+    await new Promise((resolve, reject) => {
+      serverConfig.postStateToRunningServer(
+        JSON.stringify({ state: "thinking" }),
+        {
+          timeoutMs: 100,
+          preferredPort: 23333,
+          env: { CLAWD_REMOTE: "1" },
+          postStateToPort(port, _payload, timeoutMs, cb) {
+            timeouts.push(timeoutMs);
+            cb(true, port);
+          },
+        },
+        (ok, port) => {
+          try {
+            assert.strictEqual(ok, true);
+            assert.strictEqual(port, 23333);
+            assert.deepStrictEqual(timeouts, [serverConfig.REMOTE_HOOK_HTTP_TIMEOUT_MS]);
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        }
+      );
+    });
+  });
+
+  it("postStateToRunningServer treats explicit remote option like remote hook mode", async () => {
+    const timeouts = [];
+
+    await new Promise((resolve, reject) => {
+      serverConfig.postStateToRunningServer(
+        JSON.stringify({ state: "working" }),
+        {
+          timeoutMs: 100,
+          preferredPort: 23333,
+          remote: true,
+          postStateToPort(port, _payload, timeoutMs, cb) {
+            timeouts.push(timeoutMs);
+            cb(true, port);
+          },
+        },
+        (ok, port) => {
+          try {
+            assert.strictEqual(ok, true);
+            assert.strictEqual(port, 23333);
+            assert.deepStrictEqual(timeouts, [serverConfig.REMOTE_HOOK_HTTP_TIMEOUT_MS]);
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        }
+      );
+    });
+  });
+
+  it("postStateToRunningServer lets remote false override CLAWD_REMOTE env", async () => {
+    const timeouts = [];
+
+    await new Promise((resolve, reject) => {
+      serverConfig.postStateToRunningServer(
+        JSON.stringify({ state: "working" }),
+        {
+          timeoutMs: 100,
+          preferredPort: 23333,
+          remote: false,
+          env: { CLAWD_REMOTE: "1" },
+          postStateToPort(port, _payload, timeoutMs, cb) {
+            timeouts.push(timeoutMs);
+            cb(true, port);
+          },
+        },
+        (ok, port) => {
+          try {
+            assert.strictEqual(ok, true);
+            assert.strictEqual(port, 23333);
+            assert.deepStrictEqual(timeouts, [100]);
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        }
+      );
+    });
+  });
+
+  it("postPermissionToRunningServer raises discovery timeout in CLAWD_REMOTE mode", async () => {
+    let capturedTimeout = null;
+
+    await new Promise((resolve, reject) => {
+      serverConfig.postPermissionToRunningServer(
+        JSON.stringify({ tool_name: "bash" }),
+        {
+          probeTimeoutMs: 100,
+          env: { CLAWD_REMOTE: "1" },
+          discoverClawdPort(options, cb) {
+            capturedTimeout = options.timeoutMs;
+            cb(null);
+          },
+        },
+        (ok, port) => {
+          try {
+            assert.strictEqual(ok, false);
+            assert.strictEqual(port, null);
+            assert.strictEqual(capturedTimeout, serverConfig.REMOTE_HOOK_HTTP_TIMEOUT_MS);
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        }
+      );
+    });
+  });
+
+  it("postPermissionToRunningServer raises preferred-port discovery timeout with explicit remote option", async () => {
+    let capturedTimeout = null;
+    let capturedPreferredPort = null;
+
+    await new Promise((resolve, reject) => {
+      serverConfig.postPermissionToRunningServer(
+        JSON.stringify({ tool_name: "bash" }),
+        {
+          probeTimeoutMs: 100,
+          preferredPort: 23335,
+          remote: true,
+          discoverClawdPort(options, cb) {
+            capturedTimeout = options.timeoutMs;
+            capturedPreferredPort = options.preferredPort;
+            cb(23335);
+          },
+          postPermissionToPort(port, _payload, _timeoutMs, cb) {
+            cb(true, port, "{}", 200);
+          },
+        },
+        (ok, port) => {
+          try {
+            assert.strictEqual(ok, true);
+            assert.strictEqual(port, 23335);
+            assert.strictEqual(capturedPreferredPort, 23335);
+            assert.strictEqual(capturedTimeout, serverConfig.REMOTE_HOOK_HTTP_TIMEOUT_MS);
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        }
+      );
+    });
+  });
+
 });
