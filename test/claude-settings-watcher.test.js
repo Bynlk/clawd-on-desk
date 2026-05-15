@@ -181,6 +181,45 @@ describe("createClaudeSettingsWatcher", () => {
 
     assert.deepStrictEqual(syncCalls, ["claude"]);
   });
+
+  it("re-syncs when a healthy Clawd-only baseline loses hooks", () => {
+    const { watcher, timers, syncCalls, getWatcher, setSettingsRaw } = makeWatcher();
+
+    watcher.start();
+    setSettingsRaw('{"hooks":{}}');
+    getWatcher().emitChange("settings.json");
+    timers.flush();
+
+    assert.deepStrictEqual(syncCalls, ["claude"]);
+  });
+
+  it("treats Clawd auto-start hooks as managed when checking for suspicious shrink", () => {
+    const clawdOnlyWithAutoStart = JSON.stringify({
+      hooks: {
+        SessionStart: [{
+          matcher: "",
+          hooks: [
+            { type: "command", command: 'node "/tmp/auto-start.js"' },
+            { type: "command", command: 'node "/tmp/clawd-hook.js" SessionStart' },
+          ],
+        }],
+        PermissionRequest: [{
+          matcher: "",
+          hooks: [{ type: "http", url: "http://127.0.0.1:23333/permission", timeout: 600 }],
+        }],
+      },
+    });
+    const { watcher, timers, syncCalls, getWatcher, setSettingsRaw } = makeWatcher({
+      initialSettingsRaw: clawdOnlyWithAutoStart,
+    });
+
+    watcher.start();
+    setSettingsRaw('{"hooks":{}}');
+    getWatcher().emitChange("settings.json");
+    timers.flush();
+
+    assert.deepStrictEqual(syncCalls, ["claude"]);
+  });
 });
 
 describe("createClaudeSettingsWatcher — suspicious shrink protection", () => {
@@ -218,6 +257,25 @@ describe("createClaudeSettingsWatcher — suspicious shrink protection", () => {
     skipDangerousModePermissionPrompt: true,
   });
 
+  // Hooks-only baseline with third-party hooks. Dropping to {"hooks":{}} has no top-level key loss,
+  // so this exercises the third-party hook-drop guard instead of the key-drop guard.
+  const HEALTHY_HOOKS_ONLY_WITH_THIRD_PARTY = JSON.stringify({
+    hooks: {
+      Stop: [{
+        matcher: "",
+        hooks: [
+          { type: "command", command: 'node "/tmp/clawd-hook.js" Stop' },
+          { type: "command", command: "node /home/u/.claude/hooks/maestro-audit.mjs" },
+          { type: "command", command: "node /home/u/.claude/hooks/secret-guard.js" },
+        ],
+      }],
+      PermissionRequest: [{
+        matcher: "",
+        hooks: [{ type: "http", url: "http://127.0.0.1:23333/permission", timeout: 600 }],
+      }],
+    },
+  });
+
   // Marker-removed minor shrink — user removes clawd hook only; one command hook lost (13 -> 12), keys unchanged.
   const SETTINGS_AFTER_USER_REMOVES_ONE_HOOK = JSON.stringify({
     env: { FOO: "bar" },
@@ -229,6 +287,32 @@ describe("createClaudeSettingsWatcher — suspicious shrink protection", () => {
         matcher: "",
         hooks: [
           { type: "command", command: "node /home/u/.claude/hooks/maestro-audit.mjs" },
+          { type: "command", command: "node /home/u/.claude/hooks/secret-guard.js" },
+        ],
+      }],
+      PreToolUse: [{
+        matcher: "",
+        hooks: Array.from({ length: 10 }, (_, i) => ({
+          type: "command",
+          command: `node /home/u/.claude/hooks/guard-${i}.js`,
+        })),
+      }],
+      PermissionRequest: [{
+        matcher: "",
+        hooks: [{ type: "http", url: "http://127.0.0.1:23333/permission", timeout: 600 }],
+      }],
+    },
+  });
+
+  const SETTINGS_AFTER_USER_REMOVES_CLAWD_AND_ONE_THIRD_PARTY_HOOK = JSON.stringify({
+    env: { FOO: "bar" },
+    permissions: { allow: ["*"], deny: [], defaultMode: "ask" },
+    enabledPlugins: { a: 1, b: 2 },
+    skillOverrides: { sk1: true },
+    hooks: {
+      Stop: [{
+        matcher: "",
+        hooks: [
           { type: "command", command: "node /home/u/.claude/hooks/secret-guard.js" },
         ],
       }],
@@ -301,6 +385,24 @@ describe("createClaudeSettingsWatcher — suspicious shrink protection", () => {
     assert.strictEqual(notifyCalls.length, 0);
   });
 
+  it("skips auto-resync when third-party hooks disappear even without top-level key loss", () => {
+    const notifyCalls = [];
+    const { watcher, timers, syncCalls, getWatcher, setSettingsRaw } = makeWatcher({
+      initialSettingsRaw: HEALTHY_HOOKS_ONLY_WITH_THIRD_PARTY,
+      notifySuspiciousShrink: (before, after) => notifyCalls.push({ before, after }),
+    });
+
+    watcher.start();
+    setSettingsRaw('{"hooks":{}}');
+    getWatcher().emitChange("settings.json");
+    timers.flush();
+
+    assert.deepStrictEqual(syncCalls, []);
+    assert.strictEqual(notifyCalls.length, 1);
+    assert.strictEqual(notifyCalls[0].before.thirdPartyHookCount, 2);
+    assert.strictEqual(notifyCalls[0].after.thirdPartyHookCount, 0);
+  });
+
   it("respects ctx.suspiciousShrinkRatio and ctx.suspiciousKeyLossThreshold tuning", () => {
     const notifyCalls = [];
     const { watcher, timers, syncCalls, getWatcher, setSettingsRaw } = makeWatcher({
@@ -314,7 +416,7 @@ describe("createClaudeSettingsWatcher — suspicious shrink protection", () => {
     getWatcher().emitChange("settings.json");
     timers.flush();
 
-    setSettingsRaw(SETTINGS_AFTER_USER_REMOVES_ONE_HOOK);
+    setSettingsRaw(SETTINGS_AFTER_USER_REMOVES_CLAWD_AND_ONE_THIRD_PARTY_HOOK);
     getWatcher().emitChange("settings.json");
     timers.flush();
 

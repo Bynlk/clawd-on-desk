@@ -7,6 +7,11 @@ const { buildPermissionUrl } = require("../hooks/server-config");
 
 const HOOK_MARKER = "clawd-hook.js";
 const SETTINGS_FILENAME = "settings.json";
+const MANAGED_COMMAND_MARKERS = Object.freeze([
+  HOOK_MARKER,
+  "auto-start.js",
+  "auto-start.sh",
+]);
 
 function entriesContainCommandMarker(entries, marker) {
   if (!Array.isArray(entries)) return false;
@@ -56,18 +61,25 @@ function settingsNeedClaudeHookResync(rawSettings, expectedPermissionUrl) {
   return !hasManagedCommandHook || !hasManagedPermissionHook;
 }
 
-function countCommandHooksInEntries(entries) {
+function commandContainsAnyMarker(command, markers) {
+  return typeof command === "string"
+    && Array.isArray(markers)
+    && markers.some((marker) => command.includes(marker));
+}
+
+function countCommandHooksInEntries(entries, options = {}) {
   if (!Array.isArray(entries)) return 0;
+  const excludeMarkers = Array.isArray(options.excludeMarkers) ? options.excludeMarkers : null;
   let count = 0;
   for (const entry of entries) {
     if (!entry || typeof entry !== "object") continue;
     if (entry.type === "http") continue;
-    if (typeof entry.command === "string") count += 1;
+    if (typeof entry.command === "string" && !commandContainsAnyMarker(entry.command, excludeMarkers)) count += 1;
     if (!Array.isArray(entry.hooks)) continue;
     for (const hook of entry.hooks) {
       if (!hook || typeof hook !== "object") continue;
       if (hook.type === "http") continue;
-      if (typeof hook.command === "string") count += 1;
+      if (typeof hook.command === "string" && !commandContainsAnyMarker(hook.command, excludeMarkers)) count += 1;
     }
   }
   return count;
@@ -80,20 +92,24 @@ function countCommandHooksInEntries(entries) {
  * @param {object|null|undefined} hooks
  * @returns {number}
  */
-function countAllHooks(hooks) {
+function countAllHooks(hooks, options = {}) {
   if (!hooks || typeof hooks !== "object") return 0;
   let total = 0;
   for (const entries of Object.values(hooks)) {
-    total += countCommandHooksInEntries(entries);
+    total += countCommandHooksInEntries(entries, options);
   }
   return total;
 }
 
+function countThirdPartyHooks(hooks) {
+  return countAllHooks(hooks, { excludeMarkers: MANAGED_COMMAND_MARKERS });
+}
+
 /**
- * Capture a snapshot of top-level key count and command hook count from settings.json text.
+ * Capture a snapshot of top-level key count and command hook counts from settings.json text.
  * Returns null when the payload is not a parseable JSON object so callers can skip comparisons.
  * @param {string} raw
- * @returns {{keyCount: number, hookCount: number}|null}
+ * @returns {{keyCount: number, hookCount: number, thirdPartyHookCount: number}|null}
  */
 function takeSnapshot(raw) {
   if (typeof raw !== "string" || !raw.trim()) return null;
@@ -107,15 +123,16 @@ function takeSnapshot(raw) {
   return {
     keyCount: Object.keys(parsed).length,
     hookCount: countAllHooks(parsed.hooks),
+    thirdPartyHookCount: countThirdPartyHooks(parsed.hooks),
   };
 }
 
 /**
  * Decide whether the shrink between two snapshots looks suspicious.
- * Two independent OR triggers — hook drop ratio reaches shrinkRatio, or top-level key drop reaches keyLossThreshold.
+ * Two independent OR triggers — third-party hook drop ratio reaches shrinkRatio, or top-level key drop reaches keyLossThreshold.
  * Either snapshot missing returns false because insufficient history cannot prove an attack.
- * @param {{keyCount: number, hookCount: number}|null} prev
- * @param {{keyCount: number, hookCount: number}|null} curr
+ * @param {{keyCount: number, hookCount: number, thirdPartyHookCount?: number}|null} prev
+ * @param {{keyCount: number, hookCount: number, thirdPartyHookCount?: number}|null} curr
  * @param {number} shrinkRatio
  * @param {number} keyLossThreshold
  * @returns {boolean}
@@ -124,10 +141,12 @@ function isSuspiciousShrink(prev, curr, shrinkRatio, keyLossThreshold) {
   if (!prev || !curr) return false;
   const keyDrop = prev.keyCount - curr.keyCount;
   if (keyDrop >= keyLossThreshold) return true;
-  if (prev.hookCount <= 0) return false;
-  const hookDrop = prev.hookCount - curr.hookCount;
+  const prevThirdPartyHookCount = Number.isFinite(prev.thirdPartyHookCount) ? prev.thirdPartyHookCount : 0;
+  const currThirdPartyHookCount = Number.isFinite(curr.thirdPartyHookCount) ? curr.thirdPartyHookCount : 0;
+  if (prevThirdPartyHookCount <= 0) return false;
+  const hookDrop = prevThirdPartyHookCount - currThirdPartyHookCount;
   if (hookDrop <= 0) return false;
-  return (hookDrop / prev.hookCount) >= shrinkRatio;
+  return (hookDrop / prevThirdPartyHookCount) >= shrinkRatio;
 }
 
 function createClaudeSettingsWatcher(ctx = {}) {
@@ -257,6 +276,7 @@ module.exports = {
   entriesContainHttpHookUrl,
   settingsNeedClaudeHookResync,
   countAllHooks,
+  countThirdPartyHooks,
   takeSnapshot,
   isSuspiciousShrink,
   createClaudeSettingsWatcher,
