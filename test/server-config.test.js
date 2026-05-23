@@ -72,9 +72,227 @@ describe("server-config helpers", () => {
     });
   });
 
-  it("resolveNodeBin returns bare node on Windows", () => {
-    const result = serverConfig.resolveNodeBin({ platform: "win32" });
-    assert.strictEqual(result, "node");
+  describe("resolveNodeBin on Windows", () => {
+    const WIN_ENV = {
+      SystemRoot: "C:\\Windows",
+      ProgramFiles: "C:\\Program Files",
+      "ProgramFiles(x86)": "C:\\Program Files (x86)",
+      LOCALAPPDATA: "C:\\Users\\tester\\AppData\\Local",
+      USERPROFILE: "C:\\Users\\tester",
+    };
+
+    it("returns options.execPath when it points at node.exe", () => {
+      const result = serverConfig.resolveNodeBin({
+        platform: "win32",
+        env: WIN_ENV,
+        execPath: "C:\\Program Files\\nodejs\\node.exe",
+        accessSync(candidate) {
+          if (candidate === "C:\\Program Files\\nodejs\\node.exe") return;
+          throw new Error("ENOENT");
+        },
+        execFileSync() { throw new Error("where.exe should not run when execPath is node.exe"); },
+      });
+      assert.strictEqual(result, "C:\\Program Files\\nodejs\\node.exe");
+    });
+
+    it("rejects the packaged Clawd Electron host as execPath", () => {
+      const wherePath = "C:\\Program Files\\nodejs\\node.exe";
+      const result = serverConfig.resolveNodeBin({
+        platform: "win32",
+        env: WIN_ENV,
+        execPath: "C:\\Program Files\\Clawd on Desk\\Clawd on Desk.exe",
+        accessSync(candidate) {
+          if (candidate === wherePath) return;
+          throw new Error("ENOENT");
+        },
+        execFileSync() { return `${wherePath}\r\n`; },
+      });
+      assert.strictEqual(result, wherePath);
+    });
+
+    it("iterates every where.exe line and skips scoop shims", () => {
+      const realNode = "C:\\Program Files\\nodejs\\node.exe";
+      const shim = "C:\\Users\\tester\\scoop\\shims\\node.exe";
+      const result = serverConfig.resolveNodeBin({
+        platform: "win32",
+        env: WIN_ENV,
+        execPath: "C:\\Program Files\\Clawd on Desk\\Clawd on Desk.exe",
+        accessSync(candidate) {
+          if (candidate === realNode) return;
+          throw new Error("ENOENT");
+        },
+        execFileSync() { return `${shim}\r\n${realNode}\r\n`; },
+      });
+      assert.strictEqual(result, realNode);
+    });
+
+    it("falls back to common install paths when where.exe fails", () => {
+      const probed = [];
+      const result = serverConfig.resolveNodeBin({
+        platform: "win32",
+        env: WIN_ENV,
+        execPath: "C:\\Program Files\\Clawd on Desk\\Clawd on Desk.exe",
+        accessSync(candidate) {
+          probed.push(candidate);
+          if (candidate === "C:\\Program Files\\nodejs\\node.exe") return;
+          throw new Error("ENOENT");
+        },
+        execFileSync() { throw new Error("where.exe not found"); },
+      });
+      assert.strictEqual(result, "C:\\Program Files\\nodejs\\node.exe");
+      assert.ok(probed.includes("C:\\Program Files\\nodejs\\node.exe"));
+    });
+
+    it("resolves the Scoop real app path, not the shim path", () => {
+      const realScoop = "C:\\Users\\tester\\scoop\\apps\\nodejs\\current\\node.exe";
+      const result = serverConfig.resolveNodeBin({
+        platform: "win32",
+        env: WIN_ENV,
+        execPath: "C:\\Program Files\\Clawd on Desk\\Clawd on Desk.exe",
+        accessSync(candidate) {
+          if (candidate === realScoop) return;
+          throw new Error("ENOENT");
+        },
+        execFileSync() { throw new Error("where failed"); },
+      });
+      assert.strictEqual(result, realScoop);
+    });
+
+    it("rejects Clawd on Desk.exe even when accessSync says it exists", () => {
+      // accessSync only succeeds for the Clawd.exe path so validator rejection
+      // is the only thing standing between us and a wrong return value.
+      const clawdExe = "C:\\Program Files\\Clawd on Desk\\Clawd on Desk.exe";
+      const result = serverConfig.resolveNodeBin({
+        platform: "win32",
+        env: WIN_ENV,
+        execPath: clawdExe,
+        accessSync(candidate) {
+          if (candidate === clawdExe) return;
+          throw new Error("ENOENT");
+        },
+        execFileSync() { return ""; },
+      });
+      assert.strictEqual(result, null);
+    });
+
+    it("does not spawn PowerShell as part of the default detection chain", () => {
+      const calls = [];
+      serverConfig.resolveNodeBin({
+        platform: "win32",
+        env: WIN_ENV,
+        execPath: "C:\\Program Files\\Clawd on Desk\\Clawd on Desk.exe",
+        accessSync() { throw new Error("ENOENT"); },
+        execFileSync(cmd, args) {
+          calls.push({ cmd, args });
+          throw new Error("not found");
+        },
+      });
+      const lowered = calls.map((c) => String(c.cmd).toLowerCase());
+      assert.ok(lowered.every((c) => !c.includes("powershell")), "PowerShell should not be spawned");
+    });
+
+    it("returns null when every detection step fails", () => {
+      const result = serverConfig.resolveNodeBin({
+        platform: "win32",
+        env: WIN_ENV,
+        execPath: "C:\\Program Files\\Clawd on Desk\\Clawd on Desk.exe",
+        accessSync() { throw new Error("ENOENT"); },
+        execFileSync() { throw new Error("where failed"); },
+      });
+      assert.strictEqual(result, null);
+    });
+
+    it("validateWindowsNodeCandidate rejects Clawd, Electron, scoop shims, and non-node basenames", () => {
+      const v = serverConfig.validateWindowsNodeCandidate;
+      assert.strictEqual(v("C:\\Program Files\\nodejs\\node.exe"), "C:\\Program Files\\nodejs\\node.exe");
+      assert.strictEqual(v("C:\\Program Files\\Clawd on Desk\\Clawd on Desk.exe"), null);
+      assert.strictEqual(v("C:\\Windows\\System32\\Electron.exe"), null);
+      assert.strictEqual(v("C:\\Users\\tester\\scoop\\shims\\node.exe"), null);
+      assert.strictEqual(v("C:\\Users\\TESTER\\Scoop\\Shims\\node.exe"), null);
+      assert.strictEqual(v("not absolute"), null);
+      assert.strictEqual(v("C:\\bin\\python.exe"), null);
+    });
+
+    it("validateWindowsNodeCandidate parses Windows paths regardless of host platform", () => {
+      // Regression: an earlier draft used the default `path` module, which on
+      // POSIX treats `C:\Program Files\nodejs\node.exe` as one big filename.
+      // path.basename returned the whole string, isWindowsNodeBasename failed,
+      // and every Windows resolver test silently passed only because it ran on
+      // a Windows host. Force the win32 path semantics by using path.win32.*
+      // everywhere — this assertion fails on Linux/macOS if anyone reverts.
+      const v = serverConfig.validateWindowsNodeCandidate;
+      assert.strictEqual(v("C:\\Program Files\\nodejs\\node.exe"), "C:\\Program Files\\nodejs\\node.exe");
+      assert.strictEqual(v("\\\\fileserver\\share\\node.exe"), "\\\\fileserver\\share\\node.exe");
+    });
+
+    it("getWindowsCommonNodePaths emits backslash-joined Windows paths on any host", () => {
+      // Same risk class as the validator regression: path.join on POSIX would
+      // splice the env var with forward slashes, producing paths that never
+      // exist on Windows and never match the scoop-shim/normalize checks.
+      const result = serverConfig.resolveNodeBin({
+        platform: "win32",
+        env: { ProgramFiles: "C:\\Program Files" },
+        execPath: "C:\\Program Files\\Clawd on Desk\\Clawd on Desk.exe",
+        execFileSync() { throw new Error("where failed"); },
+        accessSync(candidate) {
+          assert.ok(candidate.includes("\\"), `expected backslash in ${candidate}`);
+          assert.ok(!candidate.includes("/"), `expected no forward slash in ${candidate}`);
+          if (candidate === "C:\\Program Files\\nodejs\\node.exe") return;
+          throw new Error("ENOENT");
+        },
+      });
+      assert.strictEqual(result, "C:\\Program Files\\nodejs\\node.exe");
+    });
+
+    it("async resolver mirrors sync (execPath, where.exe, common paths, scoop shim skip)", async () => {
+      const realNode = "C:\\Program Files\\nodejs\\node.exe";
+      const shim = "C:\\Users\\tester\\scoop\\shims\\node.exe";
+
+      const fromExecPath = await serverConfig.resolveNodeBinAsync({
+        platform: "win32",
+        env: WIN_ENV,
+        execPath: realNode,
+        async access(candidate) {
+          if (candidate === realNode) return;
+          throw new Error("ENOENT");
+        },
+        async execFile() { throw new Error("where should not run when execPath wins"); },
+      });
+      assert.strictEqual(fromExecPath, realNode);
+
+      const fromWhere = await serverConfig.resolveNodeBinAsync({
+        platform: "win32",
+        env: WIN_ENV,
+        execPath: "C:\\Program Files\\Clawd on Desk\\Clawd on Desk.exe",
+        async access(candidate) {
+          if (candidate === realNode) return;
+          throw new Error("ENOENT");
+        },
+        async execFile() { return { stdout: `${shim}\r\n${realNode}\r\n` }; },
+      });
+      assert.strictEqual(fromWhere, realNode);
+
+      const fromCommon = await serverConfig.resolveNodeBinAsync({
+        platform: "win32",
+        env: WIN_ENV,
+        execPath: "C:\\Program Files\\Clawd on Desk\\Clawd on Desk.exe",
+        async access(candidate) {
+          if (candidate === realNode) return;
+          throw new Error("ENOENT");
+        },
+        async execFile() { throw new Error("where failed"); },
+      });
+      assert.strictEqual(fromCommon, realNode);
+
+      const none = await serverConfig.resolveNodeBinAsync({
+        platform: "win32",
+        env: WIN_ENV,
+        execPath: "C:\\Program Files\\Clawd on Desk\\Clawd on Desk.exe",
+        async access() { throw new Error("ENOENT"); },
+        async execFile() { throw new Error("where failed"); },
+      });
+      assert.strictEqual(none, null);
+    });
   });
 
   it("resolveNodeBin returns process.execPath when not in Electron", () => {

@@ -538,11 +538,172 @@ function extractAbsolutePathFromShellOutput(raw) {
   return null;
 }
 
+// Use path.win32.* explicitly throughout so resolveNodeBin behaves identically
+// when the test suite (or any caller) drives win32 logic from a Linux/macOS
+// host. The default `path` module follows the host platform, which on POSIX
+// treats `C:\Program Files\nodejs\node.exe` as a single filename — basename
+// returns the entire string and every Windows check silently misfires.
+const WINDOWS_NODE_BASENAMES = new Set(["node.exe", "node"]);
+
+function isWindowsNodeBasename(value) {
+  return WINDOWS_NODE_BASENAMES.has(
+    path.win32.basename(String(value || "")).toLowerCase()
+  );
+}
+
+function normalizeWindowsPathForMatch(value) {
+  return path.win32.normalize(String(value || "")).replace(/\//g, "\\").toLowerCase();
+}
+
+function isScoopShimPath(value) {
+  if (typeof value !== "string" || !value) return false;
+  return normalizeWindowsPathForMatch(value).includes("\\scoop\\shims\\");
+}
+
+function isClawdOrElectronPath(value) {
+  const norm = normalizeWindowsPathForMatch(value);
+  if (!norm) return false;
+  // Reject the packaged Electron host. Match by basename so we don't false-flag
+  // a legitimate Node living under a parent folder whose name happens to
+  // contain "Clawd" or "Electron".
+  const base = path.win32.basename(norm);
+  return base.includes("clawd on desk") || base === "electron.exe";
+}
+
+function validateWindowsNodeCandidate(value) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  // Accept drive letter (C:\...), UNC (\\server\share\...). path.win32.isAbsolute
+  // already covers both; the regex fallback exists only as a belt-and-braces
+  // guard if a future caller hands in a hand-built path object.
+  if (!path.win32.isAbsolute(trimmed) && !/^[A-Za-z]:[\\/]/.test(trimmed) && !trimmed.startsWith("\\\\")) {
+    return null;
+  }
+  if (!isWindowsNodeBasename(trimmed)) return null;
+  if (isScoopShimPath(trimmed)) return null;
+  if (isClawdOrElectronPath(trimmed)) return null;
+  return trimmed;
+}
+
+function getWindowsCommonNodePaths(options = {}) {
+  const env = options.env || process.env;
+  const probes = [];
+  if (env.ProgramFiles) {
+    probes.push(path.win32.join(env.ProgramFiles, "nodejs", "node.exe"));
+  }
+  if (env["ProgramFiles(x86)"]) {
+    probes.push(path.win32.join(env["ProgramFiles(x86)"], "nodejs", "node.exe"));
+  }
+  if (env.LOCALAPPDATA) {
+    probes.push(path.win32.join(env.LOCALAPPDATA, "Programs", "nodejs", "node.exe"));
+    probes.push(path.win32.join(env.LOCALAPPDATA, "Volta", "bin", "node.exe"));
+  }
+  if (env.USERPROFILE) {
+    probes.push(path.win32.join(env.USERPROFILE, "scoop", "apps", "nodejs", "current", "node.exe"));
+  }
+  return probes;
+}
+
+function windowsWhereExePath(options = {}) {
+  const systemRoot = (options.env || process.env).SystemRoot;
+  return systemRoot
+    ? path.win32.join(systemRoot, "System32", "where.exe")
+    : "where.exe";
+}
+
+function resolveWindowsNodeBinSync(options = {}) {
+  const access = options.accessSync || fs.accessSync;
+  const checkAccess = (candidate) => {
+    if (!candidate) return null;
+    try {
+      access(candidate, fs.constants.F_OK);
+      return candidate;
+    } catch {
+      return null;
+    }
+  };
+
+  // 1. process.execPath / options.execPath when it's actually node[.exe].
+  //    In packaged Clawd builds this is `Clawd on Desk.exe`, so it falls
+  //    through; mostly useful for unit tests and non-Electron Node runs.
+  const execHit = checkAccess(validateWindowsNodeCandidate(options.execPath || process.execPath));
+  if (execHit) return execHit;
+
+  // 2. where.exe node — iterate every line; first line passing validation wins.
+  try {
+    const execFileSync = options.execFileSync || require("child_process").execFileSync;
+    const out = execFileSync(windowsWhereExePath(options), ["node"], {
+      encoding: "utf8",
+      timeout: 2000,
+      windowsHide: true,
+    });
+    for (const line of String(out || "").split(/\r?\n/)) {
+      const hit = checkAccess(validateWindowsNodeCandidate(line));
+      if (hit) return hit;
+    }
+  } catch {}
+
+  // 3. Common install locations.
+  for (const probe of getWindowsCommonNodePaths(options)) {
+    const hit = checkAccess(validateWindowsNodeCandidate(probe));
+    if (hit) return hit;
+  }
+
+  return null;
+}
+
+async function resolveWindowsNodeBinAsync(options = {}) {
+  const access = options.access || fs.promises.access.bind(fs.promises);
+  const checkAccess = async (candidate) => {
+    if (!candidate) return null;
+    try {
+      await access(candidate, fs.constants.F_OK);
+      return candidate;
+    } catch {
+      return null;
+    }
+  };
+
+  const execHit = await checkAccess(validateWindowsNodeCandidate(options.execPath || process.execPath));
+  if (execHit) return execHit;
+
+  try {
+    const execFile = options.execFile || ((command, args, execOptions) => new Promise((resolve, reject) => {
+      require("child_process").execFile(command, args, execOptions, (err, stdout, stderr) => {
+        if (err) reject(err);
+        else resolve({ stdout, stderr });
+      });
+    }));
+    const out = await execFile(windowsWhereExePath(options), ["node"], {
+      encoding: "utf8",
+      timeout: 2000,
+      windowsHide: true,
+    });
+    const raw = typeof out === "string"
+      ? out
+      : (out && typeof out.stdout === "string" ? out.stdout : "");
+    for (const line of raw.split(/\r?\n/)) {
+      const hit = await checkAccess(validateWindowsNodeCandidate(line));
+      if (hit) return hit;
+    }
+  } catch {}
+
+  for (const probe of getWindowsCommonNodePaths(options)) {
+    const hit = await checkAccess(validateWindowsNodeCandidate(probe));
+    if (hit) return hit;
+  }
+
+  return null;
+}
+
 /**
  * Resolve the absolute path to the Node.js binary for hook commands.
  * On macOS/Linux, Claude Code runs hooks with a minimal PATH (/usr/bin:/bin)
- * that excludes Homebrew, nvm, volta, fnm, etc.  We embed the full path in
- * hook commands so they work regardless of the hook runner's PATH.
+ * that excludes Homebrew, nvm, volta, fnm, etc.  On Windows, hook runners
+ * can execute under PowerShell whose PATH does not include the Node install
+ * directory (see issue #317).  We embed the full path in hook commands so
+ * they work regardless of the hook runner's PATH.
  *
  * @param {object} [options] — for testing
  * @param {string} [options.platform]
@@ -551,13 +712,13 @@ function extractAbsolutePathFromShellOutput(raw) {
  * @param {Function} [options.accessSync]
  * @param {string} [options.execPath]
  * @param {boolean} [options.isElectron]
- * @returns {string|null} absolute path, "node" (Windows), or null (detection failed)
+ * @param {object} [options.env]
+ * @returns {string|null} absolute path, or null when detection fails
  */
 function resolveNodeBin(options = {}) {
   const platform = options.platform || process.platform;
 
-  // Windows: bare `node` works fine (PATH is inherited properly)
-  if (platform === "win32") return "node";
+  if (platform === "win32") return resolveWindowsNodeBinSync(options);
 
   const isElectron = options.isElectron !== undefined
     ? options.isElectron
@@ -615,7 +776,7 @@ function resolveNodeBin(options = {}) {
 async function resolveNodeBinAsync(options = {}) {
   const platform = options.platform || process.platform;
 
-  if (platform === "win32") return "node";
+  if (platform === "win32") return await resolveWindowsNodeBinAsync(options);
 
   const isElectron = options.isElectron !== undefined
     ? options.isElectron
@@ -690,6 +851,9 @@ module.exports = {
   readRuntimePort,
   resolveNodeBin,
   resolveNodeBinAsync,
+  resolveWindowsNodeBinSync,
+  resolveWindowsNodeBinAsync,
+  validateWindowsNodeCandidate,
   splitPortCandidates,
   postStateToPort,
   writeRuntimeConfig,
