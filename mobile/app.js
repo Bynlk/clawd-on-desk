@@ -840,13 +840,13 @@
         document.getElementById("input-token").value = this.connection.config.token || "";
       }
 
-      // Show connection info
+      // Show connection info whenever config exists
       var info = document.getElementById("current-info");
-      if (this.connection.config && this.connection.state === "connected") {
+      if (this.connection.config) {
         info.style.display = "block";
-        document.getElementById("info-host").textContent = this.connection.config.host;
-        document.getElementById("info-port").textContent = this.connection.config.port;
-        document.getElementById("info-token").textContent = this.connection.config.token;
+        document.getElementById("info-host").textContent = this.connection.config.host || "—";
+        document.getElementById("info-port").textContent = this.connection.config.port || "—";
+        document.getElementById("info-token").textContent = this.connection.config.token || "—";
       } else {
         info.style.display = "none";
       }
