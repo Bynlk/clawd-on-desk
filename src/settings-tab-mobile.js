@@ -56,7 +56,7 @@
 
     var info = document.createElement("div");
     info.id = "mobile-connection-info";
-    info.style.cssText = "font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;color:var(--text-secondary);text-align:center;word-break:break-all;max-width:280px;";
+    info.style.cssText = "font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;color:var(--text-secondary);text-align:center;word-break:break-all;max-width:320px;line-height:1.8;";
     info.textContent = t("mobileLoading");
 
     qrRow.appendChild(qrContainer);
@@ -172,7 +172,11 @@
       // 更新连接信息
       var info = document.getElementById("mobile-connection-info");
       if (info && status.ip && status.port) {
-        info.innerHTML = helpers.escapeHtml(status.ip) + ":" + helpers.escapeHtml(String(status.port));
+        var copyStyle = "margin-left:6px;padding:1px 6px;font-size:10px;border:1px solid var(--row-border);border-radius:4px;background:var(--bg);color:var(--text-secondary);cursor:pointer;";
+        info.innerHTML =
+          '<div>IP: ' + helpers.escapeHtml(status.ip) + ' <button style="' + copyStyle + '" onclick="navigator.clipboard.writeText(\'' + helpers.escapeHtml(status.ip) + '\');this.textContent=\'OK\';setTimeout(function(){this.textContent=\'Copy\'},1000)">Copy</button></div>' +
+          '<div>Port: ' + helpers.escapeHtml(String(status.port)) + ' <button style="' + copyStyle + '" onclick="navigator.clipboard.writeText(\'' + helpers.escapeHtml(String(status.port)) + '\');this.textContent=\'OK\';setTimeout(function(){this.textContent=\'Copy\'},1000)">Copy</button></div>' +
+          (status.token ? '<div>Token: ' + helpers.escapeHtml(status.token) + ' <button style="' + copyStyle + '" onclick="navigator.clipboard.writeText(\'' + helpers.escapeHtml(status.token) + '\');this.textContent=\'OK\';setTimeout(function(){this.textContent=\'Copy\'},1000)">Copy</button></div>' : '');
       }
 
       // 更新状态

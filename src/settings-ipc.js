@@ -2,7 +2,24 @@
 
 const defaultFs = require("fs");
 const defaultPath = require("path");
+const os = require("os");
 const settingsThemeImporter = require("./settings-theme-importer");
+
+function getLanIP() {
+  const interfaces = os.networkInterfaces();
+  const candidates = [];
+  for (const [name, addrs] of Object.entries(interfaces)) {
+    for (const addr of addrs) {
+      if (addr.family === "IPv4" && !addr.internal) candidates.push({ name, address: addr.address });
+    }
+  }
+  const lan = candidates.find(c =>
+    /^192\.168\./.test(c.address) ||
+    /^10\./.test(c.address) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(c.address)
+  );
+  return lan ? lan.address : (candidates[0] ? candidates[0].address : "127.0.0.1");
+}
 
 const SOUND_OVERRIDE_ASSET_EXTS = new Set([".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac"]);
 const SOUND_OVERRIDE_DIALOG_STRINGS = {
@@ -447,19 +464,10 @@ function registerSettingsIpc(options = {}) {
     const mobileWS = getMobileWS();
     if (!mobileWS) return { enabled: false, token: null, ip: null, port: null, clients: [] };
 
-    const os = require("os");
-    const interfaces = os.networkInterfaces();
-    let ip = "127.0.0.1";
-    for (const [name, addrs] of Object.entries(interfaces)) {
-      for (const addr of addrs) {
-        if (addr.family === "IPv4" && !addr.internal) { ip = addr.address; break; }
-      }
-    }
-
     return {
       enabled: true,
       token: getMobileToken() || null,
-      ip: ip,
+      ip: getLanIP(),
       port: getHookServerPort() || null,
       clients: mobileWS.getClientInfoList ? mobileWS.getClientInfoList() : [],
       connectionHistory: mobileWS.getConnectionHistory ? mobileWS.getConnectionHistory() : [],
@@ -475,14 +483,7 @@ function registerSettingsIpc(options = {}) {
     const port = getHookServerPort();
     const token = getMobileToken();
     if (!port || !token) return { dataUrl: null, error: "mobile server not ready" };
-    const os = require("os");
-    const interfaces = os.networkInterfaces();
-    let ip = "127.0.0.1";
-    for (const [name, addrs] of Object.entries(interfaces)) {
-      for (const addr of addrs) {
-        if (addr.family === "IPv4" && !addr.internal) { ip = addr.address; break; }
-      }
-    }
+    const ip = getLanIP();
     const pairUrl = `clawd://${ip}:${port}/${token}`;
     try {
       const dataUrl = await QRCode.toDataURL(pairUrl, {
