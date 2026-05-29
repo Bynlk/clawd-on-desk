@@ -76,10 +76,12 @@ class ClawdWebSocket(private val prefsStore: PrefsStore) {
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                android.util.Log.w("ClawdWS", "Closed: code=$code reason=$reason")
                 scheduleReconnect()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                android.util.Log.e("ClawdWS", "Connection failed: ${t.message}", t)
                 if (response?.code == 401 || response?.message?.contains("Invalid token") == true) {
                     _connectionState.value = ConnectionState.AUTH_FAILED
                     return
