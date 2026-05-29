@@ -137,6 +137,9 @@ function registerSettingsIpc(options = {}) {
     code: "quick_commands_unavailable",
     message: "Quick Commands are unavailable",
   }));
+  const getMobileWS = options.getMobileWS || (() => null);
+  const getMobileToken = options.getMobileToken || (() => null);
+  const getHookServerPort = options.getHookServerPort || (() => null);
   const now = options.now || (() => Date.now());
   const aboutHeroSvgPath = options.aboutHeroSvgPath
     || path.join(__dirname, "..", "assets", "svg", "clawd-about-hero.svg");
@@ -436,6 +439,41 @@ function registerSettingsIpc(options = {}) {
     } catch (err) {
       return { status: "error", message: (err && err.message) || String(err) };
     }
+  });
+
+  // Mobile companion IPC handlers
+  handle("settings:mobile-status", () => {
+    const mobileWS = getMobileWS();
+    if (!mobileWS) return { enabled: false, token: null, ip: null, port: null, clients: [] };
+
+    const os = require("os");
+    const interfaces = os.networkInterfaces();
+    let ip = "127.0.0.1";
+    for (const [name, addrs] of Object.entries(interfaces)) {
+      for (const addr of addrs) {
+        if (addr.family === "IPv4" && !addr.internal) { ip = addr.address; break; }
+      }
+    }
+
+    return {
+      enabled: true,
+      token: getMobileToken() || null,
+      ip: ip,
+      port: getHookServerPort() || null,
+      clients: mobileWS.getClientInfoList ? mobileWS.getClientInfoList() : [],
+    };
+  });
+
+  handle("settings:mobile-refresh-token", () => {
+    return { token: getMobileToken() };
+  });
+
+  handle("settings:mobile-disconnect-client", (_event, payload) => {
+    const mobileWS = getMobileWS();
+    if (mobileWS && payload && payload.clientId) {
+      mobileWS.disconnectClient(payload.clientId);
+    }
+    return { ok: true };
   });
 
   return {

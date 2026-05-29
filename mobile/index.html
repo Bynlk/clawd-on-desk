@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#6c5ce7">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/mobile/manifest.json">
+  <link rel="stylesheet" href="/mobile/style.css">
+  <title>Clawd Mobile</title>
+</head>
+<body>
+  <!-- 顶部状态栏 -->
+  <header id="status-bar">
+    <div class="connection-status">
+      <span class="status-dot" id="status-dot"></span>
+      <span class="status-text" id="status-text">未连接</span>
+    </div>
+    <div class="header-actions">
+      <button id="btn-scan" class="icon-btn" title="扫码配对">&#x1F4F7;</button>
+      <button id="btn-settings" class="icon-btn" title="设置">&#x2699;&#xFE0F;</button>
+    </div>
+  </header>
+
+  <!-- 扫码全屏覆盖层 -->
+  <div id="qr-overlay" class="overlay hidden">
+    <video id="qr-video" autoplay playsinline></video>
+    <canvas id="qr-canvas" class="hidden"></canvas>
+    <div class="qr-frame"></div>
+    <button id="btn-cancel-scan" class="cancel-btn">取消</button>
+    <div class="scan-hint">将 QR 码放入框内</div>
+  </div>
+
+  <!-- 连接设置面板 -->
+  <div id="settings-panel" class="overlay hidden">
+    <div class="settings-content">
+      <div class="settings-header">
+        <h3>连接设置</h3>
+        <button id="btn-close-settings" class="close-btn">&times;</button>
+      </div>
+      <div class="input-group">
+        <label for="input-host">地址</label>
+        <input id="input-host" type="text" placeholder="192.168.1.10" autocomplete="off">
+      </div>
+      <div class="input-group">
+        <label for="input-port">端口</label>
+        <input id="input-port" type="number" placeholder="23333" value="23333">
+      </div>
+      <div class="input-group">
+        <label for="input-token">Token</label>
+        <input id="input-token" type="text" placeholder="32位token" autocomplete="off">
+      </div>
+      <div class="btn-group">
+        <button id="btn-connect" class="primary-btn">连接</button>
+        <button id="btn-disconnect" class="secondary-btn">断开</button>
+      </div>
+      <div id="connection-history"></div>
+    </div>
+  </div>
+
+  <!-- 会话列表 -->
+  <main id="session-list">
+    <div class="empty-state" id="empty-state">
+      <div class="empty-icon">&#x1F43E;</div>
+      <div class="empty-text">扫码配对开始监控</div>
+      <button id="btn-scan-empty" class="primary-btn">扫码配对</button>
+    </div>
+  </main>
+
+  <!-- 日志面板 -->
+  <div id="log-panel" class="collapsed">
+    <button id="btn-toggle-log" class="log-toggle">&#x1F4CB; 日志</button>
+    <div id="log-content"></div>
+  </div>
+
+  <!-- Toast 通知 -->
+  <div id="toast-container"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <script src="/mobile/app.js"></script>
+</body>
+</html>

@@ -88,6 +88,10 @@ contextBridge.exposeInMainWorld("settingsAPI", {
   getQuickCommandPresets: () => ipcRenderer.invoke("settings:get-quick-command-presets"),
   sendQuickCommand: (payload) => ipcRenderer.invoke("settings:send-quick-command", payload),
   openExternal: (url) => ipcRenderer.invoke("settings:open-external", url),
+  // Mobile companion
+  mobileGetStatus: () => ipcRenderer.invoke("settings:mobile-status"),
+  mobileRefreshToken: () => ipcRenderer.invoke("settings:mobile-refresh-token"),
+  mobileDisconnectClient: (clientId) => ipcRenderer.invoke("settings:mobile-disconnect-client", { clientId }),
   listThemes: () => ipcRenderer.invoke("settings:list-themes"),
   openUserThemesDir: () => ipcRenderer.invoke("settings:open-user-themes-dir"),
   importUserThemeZip: () => ipcRenderer.invoke("settings:import-user-theme-zip"),

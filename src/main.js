@@ -986,6 +986,7 @@ const _permCtx = {
   clearShortcutFailure: (actionId) => shortcutRuntime.clearFailure(actionId),
   repositionUpdateBubble: () => repositionUpdateBubble(),
   getTelegramApprovalClient: () => getTelegramApprovalClient(),
+  getMobileApprovalClient: () => _server && typeof _server.getMobileApprovalClient === "function" ? _server.getMobileApprovalClient() : null,
   onPermissionsChanged: () => {
     if (hardwareBuddyAdapter) hardwareBuddyAdapter.notifyPermissionsChanged();
   },
@@ -1368,7 +1369,7 @@ const _serverCtx = {
   permLog,
 };
 const _server = require("./server")(_serverCtx);
-const { startHttpServer, getHookServerPort } = _server;
+const { startHttpServer, getHookServerPort, getMobileWS, getMobileToken, getMobileApprovalClient } = _server;
 
 function updateLog(msg) {
   if (!updateDebugLog) return;
@@ -2429,6 +2430,9 @@ registerSettingsIpc({
     : { status: "error", code: "quick_commands_unavailable", message: "Quick Commands are unavailable" },
   checkForUpdates,
   aboutHeroSvgPath: path.join(__dirname, "..", "assets", "svg", "clawd-about-hero.svg"),
+  getMobileWS,
+  getMobileToken,
+  getHookServerPort,
 });
 
 registerSessionIpc({

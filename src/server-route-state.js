@@ -43,6 +43,7 @@ function handleStatePost(req, res, options) {
     shouldDropForDnd,
     codexOfficialTurns,
     pathApi = path,
+    mobileWS,
   } = options;
   let body = "";
   let bodySize = 0;
@@ -164,6 +165,13 @@ function handleStatePost(req, res, options) {
         if (svg) {
           const safeSvg = pathApi.basename(svg);
           ctx.setState(state, safeSvg);
+          if (mobileWS) {
+            mobileWS.broadcastState("__global__", {
+              state,
+              event: "setState",
+              svg: safeSvg,
+            });
+          }
         } else {
           ctx.updateSession(sid, state, event, {
             sourcePid: source_pid,
@@ -186,6 +194,16 @@ function handleStatePost(req, res, options) {
             preserveState,
             hookSource,
           });
+          if (mobileWS) {
+            mobileWS.broadcastState(sid, {
+              state,
+              event: event,
+              agentId: agentId,
+              toolName: toolName || null,
+              sessionTitle: sessionTitle || null,
+              cwd: cwd || null,
+            });
+          }
         }
         res.writeHead(200, { [CLAWD_SERVER_HEADER]: CLAWD_SERVER_ID });
         res.end("ok");
