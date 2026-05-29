@@ -12,9 +12,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,11 +23,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.clawd.mobile.data.PermissionRequestData
 import com.clawd.mobile.data.RecentEvent
 import com.clawd.mobile.data.Session
-import com.clawd.mobile.data.SessionData
 import com.clawd.mobile.ui.approval.ApprovalViewModel
 import com.clawd.mobile.ui.components.ClawdIcons
 import com.clawd.mobile.ui.theme.*
@@ -63,28 +60,19 @@ fun SessionsScreen(
     val sessionsMap by webSocket.sessions.collectAsState()
     val pendingRequests by approvalViewModel.pendingRequests.collectAsState()
 
-    // Convert to sorted list
     val sessions = remember(sessionsMap) {
         sessionsMap.map { (id, data) -> Session(id, data) }
             .sortedWith(compareBy<Session> { it.stateConfig.priority }
                 .thenByDescending { it.data.updatedAt ?: 0 })
     }
 
-    // Connection dot color
-    val connectionColor = when (connectionState) {
-        ConnectionState.CONNECTED -> ClawdSuccess
-        ConnectionState.CONNECTING, ConnectionState.RECONNECTING -> ClawdWarning
-        else -> ClawdSubtleDark
-    }
-
-    // Host label
-    val hostLabel = if (connectionState == ConnectionState.CONNECTED) {
+    val isConnected = connectionState == ConnectionState.CONNECTED
+    val hostLabel = if (isConnected) {
         webSocket.currentHost?.let { host ->
             webSocket.currentPort?.let { port -> "$host:$port" }
         } ?: ""
     } else ""
 
-    // Current request to show in bottom sheet (one at a time)
     val currentRequest = pendingRequests.firstOrNull()
     var showSheet by remember { mutableStateOf(false) }
 
@@ -92,9 +80,17 @@ fun SessionsScreen(
         showSheet = pendingRequests.isNotEmpty()
     }
 
-    Scaffold { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            // Session list
+    // Bottom nav selected tab
+    var selectedTab by remember { mutableIntStateOf(0) }
+
+    Scaffold(
+        containerColor = ClawdBgDark
+    ) { padding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
             if (connectionState == ConnectionState.DISCONNECTED && sessions.isEmpty()) {
                 EmptyState(
                     onScan = { navController.navigate("scan") },
@@ -103,78 +99,43 @@ fun SessionsScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = 16.dp,
-                        end = 16.dp,
-                        top = 56.dp + WindowInsets.statusBars.asPaddingValues().calculateTopPadding(),
-                        bottom = 16.dp
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    contentPadding = PaddingValues(bottom = 100.dp),
+                    verticalArrangement = Arrangement.spacedBy(0.dp)
                 ) {
+                    // TopBar
+                    item { TopBar(onScan = { navController.navigate("scan") }, onSettings = { navController.navigate("manual") }) }
+
+                    // Connection badge
+                    item {
+                        ConnectionBadge(isConnected = isConnected, hostLabel = hostLabel)
+                    }
+
+                    // Section label
+                    item {
+                        SectionLabel(title = "活跃会话", count = sessions.size)
+                    }
+
+                    // Session cards
                     items(sessions, key = { it.id }) { session ->
-                        SessionCard(session = session)
+                        SessionCard(
+                            session = session,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
+                        )
+                    }
+
+                    // Action row
+                    item {
+                        ActionRow(modifier = Modifier.padding(top = 10.dp))
                     }
                 }
             }
 
-            // Floating header (top-right)
-            Row(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 12.dp, end = 12.dp)
-                    .statusBarsPadding(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Connection dot
-                Box(
-                    modifier = Modifier
-                        .size(7.dp)
-                        .clip(CircleShape)
-                        .background(connectionColor)
-                )
-                // Host label
-                if (hostLabel.isNotEmpty()) {
-                    Text(
-                        text = hostLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = ClawdSubtleDark,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-                // Scan button
-                IconButton(
-                    onClick = { navController.navigate("scan") },
-                    modifier = Modifier
-                        .size(36.dp)
-                        .border(1.dp, ClawdBorderDark, RoundedCornerShape(8.dp))
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(ClawdSurfaceDark)
-                ) {
-                    Icon(
-                        Icons.Default.QrCodeScanner,
-                        "扫码",
-                        tint = ClawdMutedDark,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-                // Settings button
-                IconButton(
-                    onClick = { navController.navigate("manual") },
-                    modifier = Modifier
-                        .size(36.dp)
-                        .border(1.dp, ClawdBorderDark, RoundedCornerShape(8.dp))
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(ClawdSurfaceDark)
-                ) {
-                    Icon(
-                        ClawdIcons.Working, // gear icon
-                        "设置",
-                        tint = ClawdMutedDark,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
+            // Bottom navigation
+            BottomNav(
+                selectedTab = selectedTab,
+                onTabSelected = { selectedTab = it },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
         }
 
         // Approval bottom sheet
@@ -184,28 +145,446 @@ fun SessionsScreen(
                     showSheet = false
                     currentRequest.requestId?.let { approvalViewModel.dismissRequest(it) }
                 },
-                containerColor = MaterialTheme.colorScheme.surface,
+                containerColor = ClawdCardDark,
                 shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
             ) {
                 ApprovalSheet(
                     request = currentRequest,
-                    onApprove = { requestId ->
-                        approvalViewModel.approve(requestId)
-                    },
-                    onDeny = { requestId ->
-                        approvalViewModel.deny(requestId)
-                    },
-                    onSuggestion = { requestId, index ->
-                        approvalViewModel.approveWithSuggestion(requestId, index)
-                    },
-                    onElicitation = { requestId, value ->
-                        approvalViewModel.submitElicitation(requestId, value)
-                    }
+                    onApprove = { requestId -> approvalViewModel.approve(requestId) },
+                    onDeny = { requestId -> approvalViewModel.deny(requestId) },
+                    onSuggestion = { requestId, index -> approvalViewModel.approveWithSuggestion(requestId, index) },
+                    onElicitation = { requestId, value -> approvalViewModel.submitElicitation(requestId, value) }
                 )
             }
         }
     }
 }
+
+// ─── TopBar ───────────────────────────────────────────────────────────
+
+@Composable
+private fun TopBar(onScan: () -> Unit, onSettings: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(start = 20.dp, end = 12.dp, top = 18.dp, bottom = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Left: brand
+        Column {
+            Text(
+                text = "CLAWD",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = ClawdAccent,
+                letterSpacing = 0.6.sp
+            )
+            Text(
+                text = "Mobile",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = ClawdTextDark,
+                modifier = Modifier.padding(top = 1.dp)
+            )
+        }
+
+        // Right: QR + Settings buttons
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            IconButton(
+                onClick = onScan,
+                modifier = Modifier
+                    .size(36.dp)
+                    .border(0.5.dp, ClawdBorderDark, RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(ClawdIconBtnBg)
+            ) {
+                Icon(
+                    ClawdIcons.QrCode,
+                    "扫码",
+                    tint = ClawdMutedDark,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            IconButton(
+                onClick = onSettings,
+                modifier = Modifier
+                    .size(36.dp)
+                    .border(0.5.dp, ClawdBorderDark, RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(ClawdIconBtnBg)
+            ) {
+                Icon(
+                    ClawdIcons.Settings,
+                    "设置",
+                    tint = ClawdMutedDark,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
+// ─── Connection Badge ─────────────────────────────────────────────────
+
+@Composable
+private fun ConnectionBadge(isConnected: Boolean, hostLabel: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 0.dp)
+            .padding(bottom = 14.dp)
+            .border(0.5.dp, if (isConnected) ClawdGreenBorder else ClawdBorderDark, RoundedCornerShape(8.dp))
+            .background(
+                if (isConnected) ClawdGreenBg else ClawdCardDark.copy(alpha = 0.5f),
+                RoundedCornerShape(8.dp)
+            )
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Status dot
+        Box(
+            modifier = Modifier
+                .size(7.dp)
+                .clip(CircleShape)
+                .background(if (isConnected) ClawdGreenBright else ClawdFaintDark)
+        )
+        // Text
+        Text(
+            text = if (isConnected) "已连接" else "未连接",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = if (isConnected) ClawdGreenBright else ClawdFaintDark,
+            modifier = Modifier.padding(start = 6.dp)
+        )
+        // Host:port
+        if (hostLabel.isNotEmpty()) {
+            Text(
+                text = hostLabel,
+                fontSize = 11.sp,
+                color = ClawdMuted,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier.padding(start = 8.dp)
+            )
+        }
+    }
+}
+
+// ─── Section Label ────────────────────────────────────────────────────
+
+@Composable
+private fun SectionLabel(title: String, count: Int) {
+    Text(
+        text = "$title · $count",
+        fontSize = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = ClawdMuted,
+        letterSpacing = 0.5.sp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 0.dp)
+            .padding(bottom = 8.dp)
+    )
+}
+
+// ─── Session Card ─────────────────────────────────────────────────────
+
+@Composable
+private fun SessionCard(session: Session, modifier: Modifier = Modifier) {
+    val config = session.stateConfig
+    val data = session.data
+    var expanded by remember { mutableStateOf(false) }
+    val hasEvents = data.recentEvents.isNotEmpty()
+
+    // Badge style based on state
+    val badgeText = config.label
+    val badgeBg = when (data.state) {
+        "working", "juggling" -> ClawdGreenBright.copy(alpha = 0.18f)
+        "notification" -> ClawdAccent.copy(alpha = 0.15f)
+        "thinking" -> ClawdBlue.copy(alpha = 0.15f)
+        else -> ClawdFaintDark.copy(alpha = 0.12f)
+    }
+    val badgeFg = when (data.state) {
+        "working", "juggling" -> ClawdGreenBright
+        "notification" -> ClawdAccent
+        "thinking" -> ClawdBlue
+        else -> ClawdMutedDark
+    }
+    val badgeBorder = when (data.state) {
+        "working", "juggling" -> ClawdGreenBright.copy(alpha = 0.25f)
+        "notification" -> ClawdAccent.copy(alpha = 0.3f)
+        "thinking" -> ClawdBlue.copy(alpha = 0.3f)
+        else -> ClawdBorderDark
+    }
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = ClawdCardDark),
+        border = BorderStroke(0.5.dp, ClawdCardBorderDark)
+    ) {
+        Column(modifier = Modifier.padding(14.dp, 12.dp, 14.dp, 10.dp)) {
+            // Card header: agent-dot + agent name + badge
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Agent dot (5dp, accent color)
+                    Box(
+                        modifier = Modifier
+                            .size(5.dp)
+                            .clip(CircleShape)
+                            .background(ClawdAccent)
+                    )
+                    // Agent name
+                    Text(
+                        text = (data.agentId ?: "agent").uppercase(),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = ClawdMuted,
+                        letterSpacing = 0.4.sp,
+                        modifier = Modifier.padding(start = 5.dp)
+                    )
+                }
+                // Badge
+                Text(
+                    text = badgeText,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = badgeFg,
+                    letterSpacing = 0.3.sp,
+                    modifier = Modifier
+                        .border(0.5.dp, badgeBorder, RoundedCornerShape(5.dp))
+                        .background(badgeBg, RoundedCornerShape(5.dp))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                )
+            }
+
+            // Card title
+            Text(
+                text = data.sessionTitle ?: data.agentId ?: "",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = ClawdTextDark,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+            )
+
+            // Meta row: agent icon + agentId divider folder + cwd
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (data.agentId != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Icon(ClawdIcons.Robot, null, tint = ClawdFaintDark, modifier = Modifier.size(11.dp))
+                        Text(
+                            "Agent",
+                            fontSize = 11.sp,
+                            color = ClawdFaintDark
+                        )
+                    }
+                }
+                if (!data.cwd.isNullOrBlank()) {
+                    // Divider
+                    Box(modifier = Modifier.size(1.dp, 10.dp).background(ClawdDividerDark))
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Icon(ClawdIcons.Folder, null, tint = ClawdFaintDark, modifier = Modifier.size(11.dp))
+                        Text(
+                            shortPath(data.cwd),
+                            fontSize = 11.sp,
+                            color = ClawdFaintDark,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+
+            // Divider
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp)
+                    .height(0.5.dp)
+                    .background(ClawdCardBorderDark)
+            )
+
+            // Footer: events label + count + chevron
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = hasEvents) { expanded = !expanded }
+                    .padding(top = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(ClawdIcons.Activity, null, tint = ClawdFaintDark, modifier = Modifier.size(12.dp))
+                    Text("最近事件", fontSize = 11.sp, color = ClawdFaintDark)
+                    if (hasEvents) {
+                        Text(
+                            text = "${data.recentEvents.size}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = ClawdMutedDark,
+                            modifier = Modifier
+                                .border(0.5.dp, ClawdCardBorderDark, RoundedCornerShape(5.dp))
+                                .background(Color(0xFF232330), RoundedCornerShape(5.dp))
+                                .padding(horizontal = 7.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+                if (hasEvents) {
+                    Icon(
+                        ClawdIcons.ChevronRight,
+                        null,
+                        tint = Color(0xFF3E3E46),
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+
+            // Expandable event timeline
+            AnimatedVisibility(
+                visible = expanded && hasEvents,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                EventTimeline(events = data.recentEvents)
+            }
+        }
+    }
+}
+
+// ─── Event Timeline ───────────────────────────────────────────────────
+
+@Composable
+private fun EventTimeline(events: List<RecentEvent>) {
+    Column(
+        modifier = Modifier.padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        events.forEach { event ->
+            val eventConfig = Session.STATE_CONFIG[event.state] ?: Session.STATE_CONFIG["idle"]!!
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.padding(vertical = 3.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(Color(eventConfig.color))
+                )
+                Text(
+                    Session.eventLabel(event.event),
+                    fontSize = 11.sp,
+                    color = ClawdFaintDark,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    formatAgo(event.at),
+                    fontSize = 11.sp,
+                    color = ClawdFaintDark
+                )
+            }
+        }
+    }
+}
+
+// ─── Action Row ───────────────────────────────────────────────────────
+
+@Composable
+private fun ActionRow(modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        ActionButton(icon = ClawdIcons.Checks, label = "批量审批", modifier = Modifier.weight(1f))
+        ActionButton(icon = ClawdIcons.Refresh, label = "刷新", modifier = Modifier.weight(1f))
+        ActionButton(icon = ClawdIcons.History, label = "历史", modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun ActionButton(icon: ImageVector, label: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .border(0.5.dp, ClawdCardBorderDark, RoundedCornerShape(12.dp))
+            .background(ClawdCardDark, RoundedCornerShape(12.dp))
+            .padding(vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        Icon(icon, label, tint = ClawdMutedDark, modifier = Modifier.size(18.dp))
+        Text(
+            label,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
+            color = ClawdMuted,
+            letterSpacing = 0.3.sp
+        )
+    }
+}
+
+// ─── Bottom Navigation ────────────────────────────────────────────────
+
+@Composable
+private fun BottomNav(selectedTab: Int, onTabSelected: (Int) -> Unit, modifier: Modifier = Modifier) {
+    val tabs = listOf(
+        Triple(ClawdIcons.LayoutList, "会话", 0),
+        Triple(ClawdIcons.Bell, "通知", 1),
+        Triple(ClawdIcons.DeviceDesktop, "设备", 2),
+        Triple(ClawdIcons.UserCircle, "我的", 3)
+    )
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 16.dp)
+            .border(0.5.dp, ClawdCardBorderDark, RoundedCornerShape(14.dp))
+            .background(ClawdCardDark, RoundedCornerShape(14.dp))
+            .padding(vertical = 10.dp, horizontal = 8.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        tabs.forEachIndexed { _, (icon, label, index) ->
+            val isActive = selectedTab == index
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onTabSelected(index) }
+                    .padding(vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Icon(
+                    icon,
+                    label,
+                    tint = if (isActive) ClawdAccent else ClawdFaintDark,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    label,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isActive) ClawdAccent else ClawdFaintDark,
+                    letterSpacing = 0.2.sp
+                )
+            }
+        }
+    }
+}
+
+// ─── Approval Sheet ───────────────────────────────────────────────────
 
 @Composable
 private fun ApprovalSheet(
@@ -224,21 +603,20 @@ private fun ApprovalSheet(
             .padding(horizontal = 20.dp)
             .padding(bottom = 24.dp)
     ) {
-        // Header
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.padding(bottom = 16.dp)
         ) {
             Icon(
-                imageVector = ClawdIcons.Shield,
-                contentDescription = null,
+                ClawdIcons.Shield, null,
                 modifier = Modifier.size(20.dp),
                 tint = ClawdAccent
             )
             Text(
                 request.agentId ?: "Agent",
-                style = MaterialTheme.typography.labelMedium,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
                 color = ClawdMutedDark,
                 modifier = Modifier
                     .background(ClawdSurfaceAltDark, RoundedCornerShape(4.dp))
@@ -247,37 +625,34 @@ private fun ApprovalSheet(
             Spacer(modifier = Modifier.weight(1f))
             Text(
                 if (isElicitation) "选择" else "权限",
-                style = MaterialTheme.typography.labelSmall,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
                 color = ClawdAccentLight
             )
         }
 
-        // Tool / prompt info
         if (!isElicitation && !request.toolName.isNullOrBlank()) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.padding(bottom = 8.dp)
             ) {
-                Icon(ClawdIcons.Tool, contentDescription = null, modifier = Modifier.size(14.dp), tint = ClawdSubtleDark)
-                Text(request.toolName, style = MaterialTheme.typography.bodyMedium, color = ClawdTextDark)
+                Icon(ClawdIcons.Tool, null, modifier = Modifier.size(14.dp), tint = ClawdSubtleDark)
+                Text(request.toolName, fontSize = 14.sp, color = ClawdTextDark)
             }
         }
 
-        // Summary / prompt
         if (!request.toolInputSummary.isNullOrBlank()) {
             Text(
                 request.toolInputSummary,
-                style = MaterialTheme.typography.bodySmall,
+                fontSize = 13.sp,
                 color = ClawdMutedDark,
-                modifier = Modifier.padding(bottom = 16.dp),
-                lineHeight = MaterialTheme.typography.bodySmall.lineHeight
+                modifier = Modifier.padding(bottom = 16.dp)
             )
         }
 
-        // Action buttons
         if (isElicitation && request.elicitationOptions.isNotEmpty()) {
-            request.elicitationOptions.forEachIndexed { index, option ->
+            request.elicitationOptions.forEach { option ->
                 Button(
                     onClick = { onElicitation(requestId, option.value) },
                     modifier = Modifier
@@ -295,25 +670,18 @@ private fun ApprovalSheet(
         } else if (request.suggestions.isNotEmpty()) {
             request.suggestions.forEachIndexed { index, suggestion ->
                 val isAllow = suggestion.behavior == "allow"
-                val containerColor = if (isAllow) ClawdSuccess.copy(alpha = 0.15f) else ClawdError.copy(alpha = 0.15f)
-                val contentColor = if (isAllow) ClawdSuccess else ClawdError
-
                 Button(
                     onClick = { onSuggestion(requestId, index) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 4.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = containerColor,
-                        contentColor = contentColor
+                        containerColor = if (isAllow) ClawdGreenBright.copy(alpha = 0.15f) else ClawdError.copy(alpha = 0.15f),
+                        contentColor = if (isAllow) ClawdGreenBright else ClawdError
                     ),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text(
-                        suggestion.label,
-                        modifier = Modifier.padding(vertical = 4.dp),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    Text(suggestion.label, modifier = Modifier.padding(vertical = 4.dp))
                 }
             }
         } else {
@@ -336,8 +704,8 @@ private fun ApprovalSheet(
                     onClick = { onApprove(requestId) },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = ClawdSuccess.copy(alpha = 0.15f),
-                        contentColor = ClawdSuccess
+                        containerColor = ClawdGreenBright.copy(alpha = 0.15f),
+                        contentColor = ClawdGreenBright
                     ),
                     shape = RoundedCornerShape(10.dp)
                 ) {
@@ -350,208 +718,48 @@ private fun ApprovalSheet(
     }
 }
 
+// ─── Empty State ──────────────────────────────────────────────────────
+
 @Composable
 private fun EmptyState(onScan: () -> Unit, onManual: () -> Unit) {
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().background(ClawdBgDark),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
-                imageVector = ClawdIcons.Paw,
-                contentDescription = null,
+                ClawdIcons.Paw, null,
                 modifier = Modifier.size(64.dp),
-                tint = ClawdSubtleDark
+                tint = ClawdFaintDark
             )
             Spacer(modifier = Modifier.height(16.dp))
-            Text("扫码配对开始监控", style = MaterialTheme.typography.bodyLarge, color = ClawdMutedDark)
+            Text("扫码配对开始监控", fontSize = 15.sp, color = ClawdMutedDark)
             Spacer(modifier = Modifier.height(24.dp))
-            Button(onClick = onScan) {
-                Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(18.dp))
+            Button(
+                onClick = onScan,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ClawdAccent,
+                    contentColor = Color.White
+                ),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Icon(ClawdIcons.QrCode, null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("扫码配对")
             }
             Spacer(modifier = Modifier.height(8.dp))
-            OutlinedButton(onClick = onManual) {
-                Text("手动连接")
-            }
-        }
-    }
-}
-
-@Composable
-private fun SessionCard(session: Session) {
-    val config = session.stateConfig
-    val data = session.data
-    var expanded by remember { mutableStateOf(false) }
-    val hasEvents = data.recentEvents.isNotEmpty()
-    val isActive = data.state == "working" || data.state == "thinking" || data.state == "juggling"
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, ClawdBorderDark)
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Status dot (7dp)
-            Box(
-                modifier = Modifier
-                    .size(7.dp)
-                    .clip(CircleShape)
-                    .background(Color(config.color))
-            )
-
-            // Main content
-            Column(modifier = Modifier.weight(1f)) {
-                // Title
-                Text(
-                    text = data.sessionTitle ?: data.agentId ?: "",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                // Meta row
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (data.agentId != null) {
-                        Text(
-                            text = data.agentId,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontFamily = FontFamily.Monospace,
-                            color = ClawdMutedDark,
-                            modifier = Modifier
-                                .background(ClawdSurfaceAltDark, RoundedCornerShape(4.dp))
-                                .padding(horizontal = 4.dp, vertical = 1.dp)
-                        )
-                    }
-                    Text(
-                        text = config.label,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(config.color)
-                    )
-                }
-
-                // Tool info
-                if (!data.toolName.isNullOrBlank()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(ClawdIcons.Tool, null, tint = ClawdMutedDark, modifier = Modifier.size(14.dp))
-                        Text(data.toolName, style = MaterialTheme.typography.labelSmall, color = ClawdMutedDark)
-                    }
-                }
-
-                // CWD
-                if (!data.cwd.isNullOrBlank()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(ClawdIcons.Folder, null, tint = ClawdMutedDark, modifier = Modifier.size(14.dp))
-                        Text(
-                            shortPath(data.cwd),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = ClawdSubtleDark,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-
-                // Expand trigger
-                if (hasEvents) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { expanded = !expanded }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (expanded) ClawdIcons.Collapse else ClawdIcons.Expand,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = ClawdSubtleDark
-                        )
-                        Text(
-                            "最近事件 (${data.recentEvents.size})",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = ClawdSubtleDark
-                        )
-                    }
-
-                    AnimatedVisibility(
-                        visible = expanded,
-                        enter = expandVertically(),
-                        exit = shrinkVertically()
-                    ) {
-                        EventTimeline(events = data.recentEvents)
-                    }
-                }
-
-                // Updated time
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(ClawdIcons.Clock, contentDescription = null, modifier = Modifier.size(12.dp), tint = ClawdSubtleDark)
-                    Text(formatAgo(data.updatedAt), style = MaterialTheme.typography.labelSmall, color = ClawdSubtleDark)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun EventTimeline(events: List<RecentEvent>) {
-    Column(
-        modifier = Modifier.padding(start = 4.dp, top = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp)
-    ) {
-        events.forEach { event ->
-            val eventConfig = Session.STATE_CONFIG[event.state] ?: Session.STATE_CONFIG["idle"]!!
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.padding(vertical = 3.dp)
+            OutlinedButton(
+                onClick = onManual,
+                border = BorderStroke(0.5.dp, ClawdCardBorderDark),
+                shape = RoundedCornerShape(10.dp)
             ) {
-                // Dot
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(Color(eventConfig.color))
-                )
-                // Label
-                Text(
-                    Session.eventLabel(event.event),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ClawdMutedDark,
-                    modifier = Modifier.weight(1f)
-                )
-                // Time
-                Text(
-                    formatAgo(event.at),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ClawdSubtleDark
-                )
+                Text("手动连接", color = ClawdMutedDark)
             }
         }
     }
 }
+
+// ─── Utils ────────────────────────────────────────────────────────────
 
 private fun shortPath(p: String): String {
     val parts = p.split("/", "\\")
