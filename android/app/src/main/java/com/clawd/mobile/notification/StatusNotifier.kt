@@ -110,7 +110,6 @@ class StatusNotifier(private val context: Context) {
             .setOngoing(true)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setShowBadge(false)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
 
         val notification = builder.build()
