@@ -2433,6 +2433,7 @@ registerSettingsIpc({
   getMobileWS,
   getMobileToken,
   getHookServerPort,
+  QRCode: require("qrcode"),
 });
 
 registerSessionIpc({

@@ -140,6 +140,7 @@ function registerSettingsIpc(options = {}) {
   const getMobileWS = options.getMobileWS || (() => null);
   const getMobileToken = options.getMobileToken || (() => null);
   const getHookServerPort = options.getHookServerPort || (() => null);
+  const QRCode = options.QRCode || null;
   const now = options.now || (() => Date.now());
   const aboutHeroSvgPath = options.aboutHeroSvgPath
     || path.join(__dirname, "..", "assets", "svg", "clawd-about-hero.svg");
@@ -466,6 +467,32 @@ function registerSettingsIpc(options = {}) {
 
   handle("settings:mobile-refresh-token", () => {
     return { token: getMobileToken() };
+  });
+
+  handle("settings:mobile-qr-data-url", async () => {
+    if (!QRCode) return { dataUrl: null, error: "QRCode library unavailable" };
+    const port = getHookServerPort();
+    const token = getMobileToken();
+    if (!port || !token) return { dataUrl: null, error: "mobile server not ready" };
+    const os = require("os");
+    const interfaces = os.networkInterfaces();
+    let ip = "127.0.0.1";
+    for (const [name, addrs] of Object.entries(interfaces)) {
+      for (const addr of addrs) {
+        if (addr.family === "IPv4" && !addr.internal) { ip = addr.address; break; }
+      }
+    }
+    const pairUrl = `clawd://${ip}:${port}/${token}`;
+    try {
+      const dataUrl = await QRCode.toDataURL(pairUrl, {
+        width: 300,
+        margin: 2,
+        color: { dark: "#000000", light: "#ffffff" },
+      });
+      return { dataUrl };
+    } catch (err) {
+      return { dataUrl: null, error: err && err.message };
+    }
   });
 
   handle("settings:mobile-disconnect-client", (_event, payload) => {

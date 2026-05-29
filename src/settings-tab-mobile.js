@@ -124,14 +124,6 @@
   function buildSettingsSection() {
     var rows = [];
 
-    // 移动端连接开关
-    rows.push(helpers.buildSwitchRow(
-      t("mobileEnabled"),
-      t("mobileEnabledDesc"),
-      function() { return state.mobileEnabled !== false; },
-      function(val) { ops.update("mobileEnabled", val); }
-    ));
-
     // 最大连接数
     var maxRow = document.createElement("div");
     maxRow.className = "row";
@@ -165,35 +157,40 @@
   // === QR 码加载 ===
 
   function loadQrCode() {
-    // 通过 IPC 获取配对信息
-    if (window.settingsAPI && window.settingsAPI.mobileGetStatus) {
-      window.settingsAPI.mobileGetStatus().then(function(status) {
-        if (!status) return;
-        var info = document.getElementById("mobile-connection-info");
-        if (info && status.ip && status.port) {
-          info.innerHTML = helpers.escapeHtml(status.ip) + ":" + helpers.escapeHtml(String(status.port)) + '<br>Token: <span style="color:var(--accent)">' + helpers.escapeHtml(status.token || "") + "</span>";
-        }
-        // 生成 QR 码（用服务端已有的 /mobile/pair 页面的 QR 图片）
-        generateQrDataUrl("clawd://" + (status.ip || "") + ":" + (status.port || "") + "/" + (status.token || ""), status.port);
-      }).catch(function() {});
-    }
+    if (!window.settingsAPI) return;
+    // 并行获取状态和 QR data URL
+    var statusPromise = window.settingsAPI.mobileGetStatus ? window.settingsAPI.mobileGetStatus() : Promise.resolve(null);
+    var qrPromise = window.settingsAPI.mobileGetQrDataUrl ? window.settingsAPI.mobileGetQrDataUrl() : Promise.resolve(null);
+
+    statusPromise.then(function(status) {
+      if (!status) return;
+      var info = document.getElementById("mobile-connection-info");
+      if (info && status.ip && status.port) {
+        info.innerHTML = helpers.escapeHtml(status.ip) + ":" + helpers.escapeHtml(String(status.port)) + '<br>Token: <span style="color:var(--accent)">' + helpers.escapeHtml(status.token || "") + "</span>";
+      }
+    }).catch(function() {});
+
+    qrPromise.then(function(result) {
+      var img = document.getElementById("mobile-qr-image");
+      if (!img) return;
+      if (result && result.dataUrl) {
+        img.src = result.dataUrl;
+      } else {
+        showQrFallback();
+      }
+    }).catch(function() {
+      showQrFallback();
+    });
   }
 
-  function generateQrDataUrl(text, port) {
-    // 简单 QR 生成（如果 qrcode 库可用）或显示占位
+  function showQrFallback() {
     var img = document.getElementById("mobile-qr-image");
-    if (!img) return;
-    // Electron 用 file:// 协议加载设置页，必须用完整 HTTP URL
-    img.src = "http://127.0.0.1:" + (port || 23333) + "/mobile/qr?v=" + Date.now();
-    img.onerror = function() {
-      // 降级：显示文字
-      img.style.display = "none";
-      var container = document.getElementById("mobile-qr-container");
-      if (container) {
-        container.style.cssText = "background:var(--bg);border-radius:12px;padding:24px;text-align:center;font-family:monospace;font-size:11px;word-break:break-all;max-width:240px;";
-        container.textContent = text;
-      }
-    };
+    if (img) img.style.display = "none";
+    var container = document.getElementById("mobile-qr-container");
+    if (container) {
+      container.style.cssText = "background:var(--bg);border-radius:12px;padding:24px;text-align:center;font-family:monospace;font-size:11px;word-break:break-all;max-width:240px;";
+      container.textContent = "QR code unavailable";
+    }
   }
 
   function copyConnectionInfo() {

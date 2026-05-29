@@ -90,6 +90,7 @@ contextBridge.exposeInMainWorld("settingsAPI", {
   openExternal: (url) => ipcRenderer.invoke("settings:open-external", url),
   // Mobile companion
   mobileGetStatus: () => ipcRenderer.invoke("settings:mobile-status"),
+  mobileGetQrDataUrl: () => ipcRenderer.invoke("settings:mobile-qr-data-url"),
   mobileRefreshToken: () => ipcRenderer.invoke("settings:mobile-refresh-token"),
   mobileDisconnectClient: (clientId) => ipcRenderer.invoke("settings:mobile-disconnect-client", { clientId }),
   listThemes: () => ipcRenderer.invoke("settings:list-themes"),
