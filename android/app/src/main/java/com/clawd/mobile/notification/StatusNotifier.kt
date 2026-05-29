@@ -15,6 +15,18 @@ class StatusNotifier(private val context: Context) {
             "working", "thinking", "juggling", "attention", "error", "notification"
         )
         private const val ANIM_TICK_MS = 800L
+        private val STATE_LABELS = mapOf(
+            "working" to "工作中",
+            "thinking" to "思考中",
+            "juggling" to "多任务",
+            "attention" to "需要关注",
+            "error" to "出现错误",
+            "notification" to "通知",
+            "idle" to "空闲",
+            "sleeping" to "休眠",
+            "sweeping" to "清理中",
+            "carrying" to "搬运中"
+        )
     }
 
     private val sessionStates = mutableMapOf<String, String>()
@@ -84,15 +96,17 @@ class StatusNotifier(private val context: Context) {
         val color = NotificationIcons.colorForState(state)
         val isAnimating = state in ANIMATING_STATES
         val icon = if (isAnimating && animToggle) {
-            NotificationIcons.coloredCircleDim(color)
+            NotificationIcons.coloredCircleDimBitmap(color)
         } else {
-            NotificationIcons.coloredCircle(color)
+            NotificationIcons.coloredCircleBitmap(color)
         }
 
         val builder = NotificationCompat.Builder(context, NotificationHelper.CHANNEL_STATUS)
-            .setSmallIcon(icon)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setLargeIcon(icon)
+            .setColor(color)
             .setContentTitle(title)
-            .setContentText(state)
+            .setContentText(STATE_LABELS[state] ?: state)
             .setOngoing(true)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)

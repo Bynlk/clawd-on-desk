@@ -1,11 +1,10 @@
 package com.clawd.mobile.notification
 
 import android.graphics.*
-import android.graphics.drawable.Icon
 
 object NotificationIcons {
 
-    fun coloredCircle(color: Int, size: Int = 128): Icon {
+    fun coloredCircleBitmap(color: Int, size: Int = 128): Bitmap {
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -13,10 +12,10 @@ object NotificationIcons {
             style = Paint.Style.FILL
         }
         canvas.drawCircle(size / 2f, size / 2f, size / 2f - 4f, paint)
-        return Icon.createWithBitmap(bitmap)
+        return bitmap
     }
 
-    fun coloredCircleDim(color: Int, size: Int = 128): Icon {
+    fun coloredCircleDimBitmap(color: Int, size: Int = 128): Bitmap {
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -24,7 +23,7 @@ object NotificationIcons {
             style = Paint.Style.FILL
         }
         canvas.drawCircle(size / 2f, size / 2f, size / 2f - 4f, paint)
-        return Icon.createWithBitmap(bitmap)
+        return bitmap
     }
 
     fun colorForState(state: String): Int = when (state) {
