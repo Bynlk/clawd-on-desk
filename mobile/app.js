@@ -4,16 +4,16 @@
   // === 常量 ===
 
   var STATE_CONFIG = {
-    error:        { icon: "❌", color: "#d63031", priority: 0, label: "错误" },
-    attention:    { icon: "⚠️", color: "#e17055", priority: 1, label: "需要关注" },
-    working:      { icon: "⚙️", color: "#6c5ce7", priority: 2, label: "工作中" },
-    juggling:     { icon: "\u{1F939}", color: "#a29bfe", priority: 2, label: "多任务" },
-    thinking:     { icon: "\u{1F914}", color: "#0984e3", priority: 3, label: "思考中" },
-    notification: { icon: "\u{1F514}", color: "#00cec9", priority: 4, label: "通知" },
-    sweeping:     { icon: "\u{1F9F9}", color: "#636e72", priority: 5, label: "清理中" },
-    carrying:     { icon: "\u{1F4E6}", color: "#636e72", priority: 5, label: "搬运中" },
-    idle:         { icon: "\u{1F634}", color: "#b2bec3", priority: 6, label: "空闲" },
-    sleeping:     { icon: "\u{1F4A4}", color: "#2d3436", priority: 7, label: "休眠" },
+    error:        { icon: "error",        color: "#d63031", priority: 0, label: "错误" },
+    attention:    { icon: "attention",    color: "#e17055", priority: 1, label: "需要关注" },
+    working:      { icon: "working",      color: "#6c5ce7", priority: 2, label: "工作中" },
+    juggling:     { icon: "juggling",     color: "#a29bfe", priority: 2, label: "多任务" },
+    thinking:     { icon: "thinking",     color: "#0984e3", priority: 3, label: "思考中" },
+    notification: { icon: "notification", color: "#00cec9", priority: 4, label: "通知" },
+    sweeping:     { icon: "sweeping",     color: "#636e72", priority: 5, label: "清理中" },
+    carrying:     { icon: "carrying",     color: "#636e72", priority: 5, label: "搬运中" },
+    idle:         { icon: "idle",         color: "#b2bec3", priority: 6, label: "空闲" },
+    sleeping:     { icon: "sleeping",     color: "#2d3436", priority: 7, label: "休眠" },
   };
 
   var CONNECTION_STATES = {
@@ -35,6 +35,17 @@
     return d.innerHTML;
   }
 
+  function icon(name) {
+    return (typeof ICONS !== "undefined" && ICONS[name]) || "";
+  }
+
+  function stateIcon(stateName) {
+    var cfg = STATE_CONFIG[stateName];
+    if (!cfg) return "";
+    var svg = icon(cfg.icon);
+    return '<span class="state-icon" style="color:' + cfg.color + '">' + svg + '</span>';
+  }
+
   function shortPath(p) {
     if (!p) return "";
     var parts = p.split(/[/\\]/);
@@ -48,6 +59,10 @@
     if (sec < 60) return sec + "秒前";
     if (sec < 3600) return Math.floor(sec / 60) + "分钟前";
     return Math.floor(sec / 3600) + "小时前";
+  }
+
+  function eventLabel(eventName) {
+    return (typeof EVENT_LABELS !== "undefined" && EVENT_LABELS[eventName]) || eventName || "";
   }
 
   function log(msg) {
@@ -76,6 +91,188 @@
       toast.style.transition = "opacity 0.3s";
       setTimeout(function() { toast.remove(); }, 300);
     }, 3000);
+  }
+
+  // === NotificationManager ===
+
+  class NotificationManager {
+    constructor() {
+      this.permission = "default";
+      this.lastStates = new Map();
+    }
+
+    requestPermission() {
+      if (!("Notification" in window)) return;
+      if (Notification.permission === "granted") {
+        this.permission = "granted";
+        return;
+      }
+      if (Notification.permission !== "denied") {
+        var self = this;
+        Notification.requestPermission().then(function(p) {
+          self.permission = p;
+        });
+      }
+    }
+
+    onStateChange(sessionId, data) {
+      if (this.permission !== "granted") return;
+      if (document.visibilityState === "visible") return;
+
+      var prev = this.lastStates.get(sessionId);
+      this.lastStates.set(sessionId, data.state);
+
+      var s = data.state;
+      var config = STATE_CONFIG[s];
+      if (!config) return;
+
+      if (s === "error" || s === "attention") {
+        this._notify(config.label, (data.agentId || "Agent") + " - " + config.label, s);
+      } else if ((prev === "working" || prev === "thinking") && s === "idle") {
+        this._notify("任务完成", (data.agentId || "Agent") + " 已完成任务", "idle");
+      }
+    }
+
+    onApprovalNeeded(data) {
+      if (this.permission !== "granted") return;
+      if (document.visibilityState === "visible") return;
+      this._notify("需要操作", (data.agentId || "Agent") + " 请求权限", "notification");
+    }
+
+    _notify(title, body, tag) {
+      try {
+        if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.ready.then(function(reg) {
+            reg.showNotification(title, { body: body, tag: "clawd-" + (tag || "default"), icon: "/mobile/icon-192.png" });
+          });
+        } else {
+          new Notification(title, { body: body, tag: "clawd-" + (tag || "default") });
+        }
+      } catch {}
+    }
+  }
+
+  // === ApprovalManager ===
+
+  class ApprovalManager {
+    constructor() {
+      this.pending = new Map();
+      this.overlay = document.getElementById("approval-overlay");
+      this.onSend = null;
+    }
+
+    showRequest(msg) {
+      var requestId = msg.requestId;
+      if (!requestId) return;
+
+      this.pending.set(requestId, msg);
+      this._render();
+
+      log("Approval request: " + (msg.data ? msg.data.toolName || msg.data.prompt || "unknown" : "unknown"));
+    }
+
+    dismiss(requestId) {
+      this.pending.delete(requestId);
+      this._render();
+    }
+
+    _render() {
+      if (this.pending.size === 0) {
+        this.overlay.classList.add("hidden");
+        this.overlay.innerHTML = "";
+        return;
+      }
+
+      var self = this;
+      var html = '<div class="approval-sheet">';
+
+      this.pending.forEach(function(msg, requestId) {
+        var data = msg.data || {};
+        var isPermission = msg.type === "permission_request";
+
+        html += '<div class="approval-card">';
+        html += '<div class="approval-header">';
+        html += '<span class="approval-icon">' + icon("shield") + '</span>';
+        html += '<span class="approval-agent">' + esc(data.agentId || "Agent") + '</span>';
+        html += '<span class="approval-type">' + (isPermission ? "权限请求" : "选择操作") + '</span>';
+        html += '</div>';
+
+        if (isPermission) {
+          if (data.toolName) {
+            html += '<div class="approval-tool">' + icon("tool") + ' ' + esc(data.toolName) + '</div>';
+          }
+          if (data.toolInputSummary) {
+            html += '<div class="approval-summary">' + esc(data.toolInputSummary) + '</div>';
+          }
+          html += '<div class="approval-actions">';
+          if (data.suggestions && data.suggestions.length > 0) {
+            for (var i = 0; i < data.suggestions.length; i++) {
+              var sug = data.suggestions[i];
+              var cls = sug.behavior === "allow" ? "allow" : sug.behavior === "deny" ? "deny" : "neutral";
+              html += '<button class="approval-btn ' + cls + '" data-request="' + requestId + '" data-behavior="' + esc(sug.behavior || "") + '" data-index="' + i + '">' + esc(sug.label || sug.behavior || "选择") + '</button>';
+            }
+          } else {
+            html += '<button class="approval-btn allow" data-request="' + requestId + '" data-behavior="allow">允许</button>';
+            html += '<button class="approval-btn deny" data-request="' + requestId + '" data-behavior="deny">拒绝</button>';
+          }
+          html += '</div>';
+        } else {
+          // elicitation
+          if (data.prompt) {
+            html += '<div class="approval-summary">' + esc(data.prompt) + '</div>';
+          }
+          html += '<div class="approval-actions">';
+          if (data.options && data.options.length > 0) {
+            for (var j = 0; j < data.options.length; j++) {
+              var opt = data.options[j];
+              html += '<button class="approval-btn neutral" data-request="' + requestId + '" data-elicitation="true" data-value="' + esc(opt.value || "") + '">' + esc(opt.label || opt.value || "选择") + '</button>';
+            }
+          }
+          html += '</div>';
+        }
+
+        // timeout bar
+        var timeout = data.timeout || 90000;
+        html += '<div class="approval-timer"><div class="approval-timer-bar" style="animation-duration:' + timeout + 'ms"></div></div>';
+        html += '</div>';
+      });
+
+      html += '</div>';
+      this.overlay.innerHTML = html;
+      this.overlay.classList.remove("hidden");
+
+      // bind buttons
+      this.overlay.querySelectorAll(".approval-btn").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+          var rid = this.getAttribute("data-request");
+          var behavior = this.getAttribute("data-behavior");
+          var isElicitation = this.getAttribute("data-elicitation") === "true";
+          var value = this.getAttribute("data-value");
+
+          if (isElicitation) {
+            if (self.onSend) {
+              self.onSend({
+                type: "elicitation_response",
+                requestId: rid,
+                answers: { value: value },
+              });
+            }
+          } else {
+            var suggestionIndex = this.getAttribute("data-index");
+            var payload = {
+              type: "permission_response",
+              requestId: rid,
+              behavior: behavior,
+            };
+            if (suggestionIndex !== null && suggestionIndex !== "") {
+              payload.suggestionIndex = parseInt(suggestionIndex, 10);
+            }
+            if (self.onSend) self.onSend(payload);
+          }
+          self.dismiss(rid);
+        });
+      });
+    }
   }
 
   // === ConnectionManager ===
@@ -151,6 +348,12 @@
       this.ws.onerror = function() {};
     }
 
+    send(data) {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(typeof data === "string" ? data : JSON.stringify(data));
+      }
+    }
+
     _scheduleReconnect() {
       this._setState("reconnecting");
       var self = this;
@@ -205,6 +408,7 @@
       this.container = container;
       this.sessions = new Map();
       this.staleTimer = null;
+      this.expandedSet = new Set();
     }
 
     updateFromSnapshot(sessions) {
@@ -227,7 +431,17 @@
       this.render();
     }
 
+    toggleExpand(sid) {
+      if (this.expandedSet.has(sid)) {
+        this.expandedSet.delete(sid);
+      } else {
+        this.expandedSet.add(sid);
+      }
+      this.render();
+    }
+
     render() {
+      var self = this;
       var entries = [];
       this.sessions.forEach(function(v, k) { entries.push([k, v]); });
 
@@ -240,10 +454,15 @@
 
       if (entries.length === 0) {
         this.container.innerHTML = '<div class="empty-state" id="empty-state">' +
-          '<div class="empty-icon">\u{1F43E}</div>' +
+          '<div class="empty-icon">' + icon("paw") + '</div>' +
           '<div class="empty-text">扫码配对开始监控</div>' +
           '<button id="btn-scan-empty" class="primary-btn">扫码配对</button>' +
           '</div>';
+        var scanBtn = document.getElementById("btn-scan-empty");
+        if (scanBtn) scanBtn.addEventListener("click", function() {
+          var app = window._clawdApp;
+          if (app) app._openScanner();
+        });
         return;
       }
 
@@ -252,27 +471,80 @@
         html += this._renderCard(entries[i][0], entries[i][1]);
       }
       this.container.innerHTML = html;
+
+      // bind expand toggles
+      this.container.querySelectorAll(".expand-trigger").forEach(function(el) {
+        el.addEventListener("click", function() {
+          var sid = this.getAttribute("data-sid");
+          self.toggleExpand(sid);
+        });
+      });
     }
 
     _renderCard(sid, s) {
       var config = STATE_CONFIG[s.state] || STATE_CONFIG.idle;
       var ago = formatAgo(s.updatedAt);
+      var isExpanded = this.expandedSet.has(sid);
+      var events = (s.recentEvents || []);
+      var hasEvents = events.length > 0;
+
       var html = '<div class="session-card" style="border-left: 3px solid ' + config.color + '">';
+
+      // header
       html += '<div class="session-header">';
-      html += '<span class="state-icon">' + config.icon + '</span>';
+      html += stateIcon(s.state);
       html += '<span class="agent-id">' + esc(s.agentId || "unknown") + '</span>';
-      html += '<span class="state-label">' + config.label + '</span>';
+      html += '<span class="state-label" style="color:' + config.color + '">' + config.label + '</span>';
       html += '</div>';
+
+      // title
       if (s.sessionTitle) {
         html += '<div class="session-title">' + esc(s.sessionTitle) + '</div>';
       }
+
+      // tool
       if (s.toolName) {
-        html += '<div class="tool-info">\u{1F527} ' + esc(s.toolName) + '</div>';
+        html += '<div class="tool-info">' + icon("tool") + ' ' + esc(s.toolName) + '</div>';
       }
+
+      // cwd
       if (s.cwd) {
-        html += '<div class="cwd">\u{1F4C2} ' + esc(shortPath(s.cwd)) + '</div>';
+        html += '<div class="cwd">' + icon("folder") + ' ' + esc(shortPath(s.cwd)) + '</div>';
       }
-      html += '<div class="session-footer">' + ago + '</div>';
+
+      // expand trigger
+      if (hasEvents) {
+        var chevronIcon = isExpanded ? icon("collapse") : icon("expand");
+        html += '<div class="expand-trigger" data-sid="' + sid + '">';
+        html += '<span class="expand-chevron">' + chevronIcon + '</span>';
+        html += '<span class="expand-label">最近事件 (' + events.length + ')</span>';
+        html += '</div>';
+
+        if (isExpanded) {
+          html += this._renderEventHistory(events);
+        }
+      }
+
+      // footer
+      html += '<div class="session-footer">' + icon("clock") + ' ' + ago + '</div>';
+      html += '</div>';
+      return html;
+    }
+
+    _renderEventHistory(events) {
+      var html = '<div class="event-history">';
+      for (var i = 0; i < events.length; i++) {
+        var ev = events[i];
+        var evConfig = STATE_CONFIG[ev.state] || STATE_CONFIG.idle;
+        var label = eventLabel(ev.event);
+        var time = formatAgo(ev.at);
+        html += '<div class="event-row">';
+        html += '<div class="event-dot" style="background:' + evConfig.color + '"></div>';
+        html += '<div class="event-line" style="background:' + evConfig.color + '"></div>';
+        html += '<span class="event-label">' + esc(label) + '</span>';
+        html += '<span class="event-time">' + time + '</span>';
+        html += '</div>';
+      }
       html += '</div>';
       return html;
     }
@@ -399,9 +671,14 @@
         document.getElementById("qr-video"),
         document.getElementById("qr-canvas")
       );
+      this.approval = new ApprovalManager();
+      this.notifier = new NotificationManager();
+
+      window._clawdApp = this;
 
       this._bindEvents();
       this._bindConnection();
+      this._bindApproval();
       this.renderer.startStaleCleanup();
 
       if ("serviceWorker" in navigator) {
@@ -413,7 +690,6 @@
       var self = this;
 
       document.getElementById("btn-scan").addEventListener("click", function() { self._openScanner(); });
-      document.getElementById("btn-scan-empty").addEventListener("click", function() { self._openScanner(); });
       document.getElementById("btn-cancel-scan").addEventListener("click", function() { self._closeScanner(); });
 
       document.getElementById("btn-settings").addEventListener("click", function() { self._openSettings(); });
@@ -445,15 +721,34 @@
         var text = document.getElementById("status-text");
         dot.className = "status-dot " + config.dot;
         text.textContent = config.text;
+
+        if (state === "connected") {
+          self.notifier.requestPermission();
+        }
       };
 
       this.connection.onMessage = function(msg) {
         if (msg.type === "snapshot") {
           self.renderer.updateFromSnapshot(msg.sessions || {});
-          log("Snapshot received: " + Object.keys(msg.sessions || {}).length + " sessions");
+          log("Snapshot: " + Object.keys(msg.sessions || {}).length + " sessions");
         } else if (msg.type === "state") {
           self.renderer.updateState(msg.sessionId, msg.data);
+          self.notifier.onStateChange(msg.sessionId, msg.data);
+        } else if (msg.type === "permission_request") {
+          self.approval.showRequest({ type: "permission_request", requestId: msg.requestId, data: msg.data || msg });
+          self.notifier.onApprovalNeeded(msg.data || msg);
+        } else if (msg.type === "elicitation_request") {
+          self.approval.showRequest({ type: "elicitation_request", requestId: msg.requestId, data: msg.data || msg });
+          self.notifier.onApprovalNeeded(msg.data || msg);
         }
+      };
+    }
+
+    _bindApproval() {
+      var self = this;
+      this.approval.onSend = function(response) {
+        self.connection.send(response);
+        log("Sent: " + response.type);
       };
     }
 
@@ -517,7 +812,7 @@
         html += '<span class="history-addr">' + esc(h.host) + ':' + h.port + '</span>';
         html += '<span class="history-time">' + ago + '</span>';
         html += '<button class="history-connect" data-index="' + i + '">连接</button>';
-        html += '<button class="history-delete" data-index="' + i + '">×</button>';
+        html += '<button class="history-delete" data-index="' + i + '">&times;</button>';
         html += '</div>';
       });
       container.innerHTML = html;

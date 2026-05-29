@@ -160,6 +160,7 @@ class ClawdWebSocket(private val prefsStore: PrefsStore) {
                                     toolName = "elicitation",
                                     toolInputSummary = elicitData.prompt,
                                     sessionId = elicitData.sessionId,
+                                    elicitationOptions = elicitData.options,
                                     requestId = obj["requestId"]?.jsonPrimitive?.contentOrNull,
                                 )
                             )

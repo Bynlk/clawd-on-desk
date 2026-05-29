@@ -195,6 +195,10 @@ function handleStatePost(req, res, options) {
             hookSource,
           });
           if (mobileWS) {
+            const session = ctx.sessions ? ctx.sessions.get(sid) : null;
+            const recentEvents = (session && Array.isArray(session.recentEvents))
+              ? session.recentEvents
+              : [];
             mobileWS.broadcastState(sid, {
               state,
               event: event,
@@ -202,6 +206,7 @@ function handleStatePost(req, res, options) {
               toolName: toolName || null,
               sessionTitle: sessionTitle || null,
               cwd: cwd || null,
+              recentEvents,
             });
           }
         }

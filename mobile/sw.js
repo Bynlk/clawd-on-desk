@@ -1,8 +1,10 @@
-const CACHE_NAME = "clawd-mobile-v1";
+const CACHE_NAME = "clawd-mobile-v2";
 const STATIC_ASSETS = [
   "/mobile/",
   "/mobile/index.html",
   "/mobile/style.css",
+  "/mobile/icons.js",
+  "/mobile/app.js",
   "/mobile/manifest.json",
 ];
 
@@ -40,6 +42,19 @@ self.addEventListener("fetch", (event) => {
       if (event.request.destination === "document") {
         return caches.match("/mobile/index.html");
       }
+    })
+  );
+});
+
+// 通知点击：聚焦到已有窗口
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ("focus" in client) return client.focus();
+      }
+      return self.clients.openWindow("/mobile/");
     })
   );
 });

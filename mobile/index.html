@@ -18,8 +18,8 @@
       <span class="status-text" id="status-text">未连接</span>
     </div>
     <div class="header-actions">
-      <button id="btn-scan" class="icon-btn" title="扫码配对">&#x1F4F7;</button>
-      <button id="btn-settings" class="icon-btn" title="设置">&#x2699;&#xFE0F;</button>
+      <button id="btn-scan" class="icon-btn" title="扫码配对"><span class="icon-scan"></span></button>
+      <button id="btn-settings" class="icon-btn" title="设置"><span class="icon-settings"></span></button>
     </div>
   </header>
 
@@ -37,7 +37,7 @@
     <div class="settings-content">
       <div class="settings-header">
         <h3>连接设置</h3>
-        <button id="btn-close-settings" class="close-btn">&times;</button>
+        <button id="btn-close-settings" class="close-btn"><span class="icon-close"></span></button>
       </div>
       <div class="input-group">
         <label for="input-host">地址</label>
@@ -62,15 +62,18 @@
   <!-- 会话列表 -->
   <main id="session-list">
     <div class="empty-state" id="empty-state">
-      <div class="empty-icon">&#x1F43E;</div>
+      <div class="empty-icon"></div>
       <div class="empty-text">扫码配对开始监控</div>
       <button id="btn-scan-empty" class="primary-btn">扫码配对</button>
     </div>
   </main>
 
+  <!-- 审批覆盖层 -->
+  <div id="approval-overlay" class="approval-overlay hidden"></div>
+
   <!-- 日志面板 -->
   <div id="log-panel" class="collapsed">
-    <button id="btn-toggle-log" class="log-toggle">&#x1F4CB; 日志</button>
+    <button id="btn-toggle-log" class="log-toggle"><span class="icon-clipboard"></span> 日志</button>
     <div id="log-content"></div>
   </div>
 
@@ -78,6 +81,7 @@
   <div id="toast-container"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <script src="/mobile/icons.js"></script>
   <script src="/mobile/app.js"></script>
 </body>
 </html>

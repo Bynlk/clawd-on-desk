@@ -10,7 +10,15 @@ data class SessionData(
     val toolName: String? = null,
     val sessionTitle: String? = null,
     val cwd: String? = null,
-    val updatedAt: Long? = null
+    val updatedAt: Long? = null,
+    val recentEvents: List<RecentEvent> = emptyList()
+)
+
+@Serializable
+data class RecentEvent(
+    val at: Long = 0,
+    val event: String? = null,
+    val state: String? = null
 )
 
 data class Session(
@@ -19,17 +27,33 @@ data class Session(
 ) {
     companion object {
         val STATE_CONFIG = mapOf(
-            "error" to StateConfig("❌", 0xFFD63031, 0, "错误"),
-            "attention" to StateConfig("⚠️", 0xFFE17055, 1, "需要关注"),
-            "working" to StateConfig("⚙️", 0xFF6C5CE7, 2, "工作中"),
-            "juggling" to StateConfig("🤹", 0xFFA29BFE, 2, "多任务"),
-            "thinking" to StateConfig("🤔", 0xFF0984E3, 3, "思考中"),
-            "notification" to StateConfig("🔔", 0xFF00CEC9, 4, "通知"),
-            "sweeping" to StateConfig("🧹", 0xFF636E72, 5, "清理中"),
-            "carrying" to StateConfig("📦", 0xFF636E72, 5, "搬运中"),
-            "idle" to StateConfig("😴", 0xFFB2BEC3, 6, "空闲"),
-            "sleeping" to StateConfig("💤", 0xFF2D3436, 7, "休眠"),
+            "error" to StateConfig("error", 0xFFD63031, 0, "错误"),
+            "attention" to StateConfig("attention", 0xFFE17055, 1, "需要关注"),
+            "working" to StateConfig("working", 0xFF6C5CE7, 2, "工作中"),
+            "juggling" to StateConfig("juggling", 0xFFA29BFE, 2, "多任务"),
+            "thinking" to StateConfig("thinking", 0xFF0984E3, 3, "思考中"),
+            "notification" to StateConfig("notification", 0xFF00CEC9, 4, "通知"),
+            "sweeping" to StateConfig("sweeping", 0xFF636E72, 5, "清理中"),
+            "carrying" to StateConfig("carrying", 0xFF636E72, 5, "搬运中"),
+            "idle" to StateConfig("idle", 0xFFB2BEC3, 6, "空闲"),
+            "sleeping" to StateConfig("sleeping", 0xFF2D3436, 7, "休眠"),
         )
+
+        /** Map event names to user-visible Chinese labels */
+        fun eventLabel(eventName: String?): String = when (eventName) {
+            "UserPromptSubmit" -> "用户输入"
+            "PreToolUse" -> "工具启动"
+            "PostToolUse" -> "工具完成"
+            "PostToolUseFailure" -> "工具失败"
+            "Stop" -> "已完成"
+            "SessionStart" -> "会话开始"
+            "SessionEnd" -> "会话结束"
+            "PermissionRequest" -> "需要权限"
+            "Notification" -> "通知"
+            "SubagentStart" -> "子代理启动"
+            "SubagentStop" -> "子代理停止"
+            else -> eventName ?: ""
+        }
     }
 
     val stateConfig: StateConfig
@@ -37,7 +61,7 @@ data class Session(
 }
 
 data class StateConfig(
-    val icon: String,
+    val iconKey: String,
     val color: Long,
     val priority: Int,
     val label: String

@@ -25,7 +25,7 @@ class StatusNotifier(private val context: Context) {
             "attention" -> {
                 showNotification(
                     sessionId,
-                    "⚠️ 需要关注",
+                    "需要关注",
                     data.sessionTitle ?: "${data.agentId} 需要关注",
                     android.app.Notification.PRIORITY_HIGH
                 )
@@ -33,7 +33,7 @@ class StatusNotifier(private val context: Context) {
             "error" -> {
                 showNotification(
                     sessionId,
-                    "❌ 出现错误",
+                    "出现错误",
                     data.sessionTitle ?: "${data.agentId} 遇到错误",
                     android.app.Notification.PRIORITY_HIGH
                 )
@@ -41,7 +41,7 @@ class StatusNotifier(private val context: Context) {
             "notification" -> {
                 showNotification(
                     sessionId,
-                    "🔔 通知",
+                    "通知",
                     data.sessionTitle ?: "${data.agentId} 发送通知"
                 )
             }
@@ -49,7 +49,7 @@ class StatusNotifier(private val context: Context) {
                 if (prevState == "working" || prevState == "thinking") {
                     showNotification(
                         sessionId,
-                        "✅ 任务完成",
+                        "任务完成",
                         data.sessionTitle ?: "${data.agentId} 已完成"
                     )
                 }
@@ -58,7 +58,7 @@ class StatusNotifier(private val context: Context) {
                 if (prevState != null && prevState != "sleeping") {
                     showNotification(
                         sessionId,
-                        "💤 会话结束",
+                        "会话结束",
                         data.sessionTitle ?: "${data.agentId} 已结束",
                         android.app.Notification.PRIORITY_LOW
                     )
@@ -75,9 +75,8 @@ class StatusNotifier(private val context: Context) {
 
     fun clearSession(sessionId: String) {
         lastState.remove(sessionId)
-        sessionNotificationIds.remove(sessionId)
-        // Cancel any notification for this session
-        val id = sessionNotificationIds[sessionId]
+        // Read the notification ID before removing from map
+        val id = sessionNotificationIds.remove(sessionId)
         if (id != null) {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.cancel(id)
