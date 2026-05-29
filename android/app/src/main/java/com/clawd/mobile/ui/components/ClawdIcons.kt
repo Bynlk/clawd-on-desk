@@ -15,7 +15,7 @@ import androidx.compose.ui.unit.dp
  */
 object ClawdIcons {
 
-    private val strokeColor = SolidColor(Color.Unspecified) // tint applied at use site
+    private val strokeColor = SolidColor(Color.Black) // alpha=1.0 required for Icon tint (BlendMode.SrcIn)
 
     private fun iconBuilder(name: String, block: ImageVector.Builder.() -> ImageVector.Builder): ImageVector {
         return ImageVector.Builder(
