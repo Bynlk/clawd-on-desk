@@ -27,10 +27,10 @@ import com.clawd.mobile.ws.ClawdWebSocket
 @Composable
 fun SessionsScreen(
     navController: NavController,
-    webSocket: ClawdWebSocket? = null
+    webSocket: ClawdWebSocket
 ) {
-    val connectionState by (webSocket?.connectionState ?: remember { mutableStateOf(ConnectionState.DISCONNECTED) }).collectAsState()
-    val sessionsMap by (webSocket?.sessions ?: remember { mutableStateOf(emptyMap()) }).collectAsState()
+    val connectionState by webSocket.connectionState.collectAsState()
+    val sessionsMap by webSocket.sessions.collectAsState()
 
     // Convert to sorted list
     val sessions = remember(sessionsMap) {
