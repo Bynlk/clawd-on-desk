@@ -13,8 +13,8 @@ android {
         applicationId = "com.clawd.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 15
-        versionName = "1.2.7"
+        versionCode = 19
+        versionName = "1.3.1"
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
@@ -61,8 +61,9 @@ dependencies {
     implementation(libs.navigation.compose)
     implementation(libs.lifecycle.runtime)
 
-    // WebSocket
+    // HTTP / SSE
     implementation(libs.okhttp)
+    implementation(libs.okhttp.sse)
 
     // Serialization
     implementation(libs.kotlinx.serialization.json)

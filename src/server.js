@@ -95,6 +95,10 @@ if (!savedState.token) saveMobileState({ token: MOBILE_TOKEN });
 let mobileWS = null;
 const mobileApprovalClient = new MobileApprovalClient(() => mobileWS);
 let activeServerPort = null;
+let mobileHttpServer = null;
+let mobileServerPort = null;
+const mobileSSEClients = new Set();
+const pendingMobileApprovals = new Map();
 const codexOfficialTurns = new Map();
 const recentHookEvents = new Map();
 
@@ -258,7 +262,7 @@ function getLocalIP() {
 }
 
 async function handleMobileQrImage(req, res) {
-  const pairUrl = `clawd://${getLocalIP()}:${activeServerPort}/${MOBILE_TOKEN}`;
+  const pairUrl = `clawd://${getLocalIP()}:23334/${MOBILE_TOKEN}`;
   try {
     const buffer = await QRCode.toBuffer(pairUrl, {
       width: 300,
@@ -278,7 +282,7 @@ async function handleMobileQrImage(req, res) {
 }
 
 async function handleMobilePairPage(req, res) {
-  const pairUrl = `clawd://${getLocalIP()}:${activeServerPort}/${MOBILE_TOKEN}`;
+  const pairUrl = `clawd://${getLocalIP()}:23334/${MOBILE_TOKEN}`;
   try {
     const qrDataUrl = await QRCode.toDataURL(pairUrl, {
       width: 300,
@@ -330,7 +334,7 @@ async function handleMobilePairPage(req, res) {
       <img src="${qrDataUrl}" alt="QR Code">
     </div>
     <div class="info">
-      ${getLocalIP()}:${activeServerPort}<br>
+      ${getLocalIP()}:23334<br>
       Token: <span class="token">${MOBILE_TOKEN}</span>
     </div>
     <ol class="steps">
@@ -404,6 +408,7 @@ function startHttpServer() {
         shouldDropForDnd,
         codexOfficialTurns,
         mobileWS,
+        broadcastHookEvent,
       });
     } else if (req.method === "POST" && req.url === "/permission") {
       handlePermissionPost(req, res, {
@@ -497,7 +502,7 @@ function startHttpServer() {
     }
     // 终端 QR 码
     QRCode.toString(
-      `clawd://${getLocalIP()}:${activeServerPort}/${MOBILE_TOKEN}`,
+      `clawd://${getLocalIP()}:23334/${MOBILE_TOKEN}`,
       { type: "terminal", small: true },
       (err, str) => {
         if (!err) console.log(str);
@@ -515,7 +520,110 @@ function startHttpServer() {
   httpServer.listen(listenPorts[listenIndex], "0.0.0.0");
 }
 
+function broadcastHookEvent(eventData) {
+  if (mobileSSEClients.size === 0) return;
+  const data = `data: ${JSON.stringify(eventData)}\n\n`;
+  for (const client of mobileSSEClients) {
+    try { client.write(data); } catch { mobileSSEClients.delete(client); }
+  }
+}
+
+function startMobileServer() {
+  const MOBILE_PORT = 23334;
+  mobileHttpServer = createHttpServer((req, res) => {
+    if (req.method === "GET" && req.url === "/mobile/stream") {
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "Access-Control-Allow-Origin": "*",
+      });
+      res.write(`data: ${JSON.stringify({ type: "connected", timestamp: Date.now() })}\n\n`);
+      mobileSSEClients.add(res);
+      console.log(`[mobile-sse] Client connected (total: ${mobileSSEClients.size})`);
+      req.on("close", () => {
+        mobileSSEClients.delete(res);
+        console.log(`[mobile-sse] Client disconnected (total: ${mobileSSEClients.size})`);
+      });
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/mobile/approve") {
+      let body = "";
+      req.on("data", (chunk) => { body += chunk; });
+      req.on("end", () => {
+        let data;
+        try { data = JSON.parse(body); } catch {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "invalid json" }));
+          return;
+        }
+        const { id, decision } = data;
+        if (!id || (decision !== "allow" && decision !== "deny")) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "need { id, decision: \"allow\"|\"deny\" }" }));
+          return;
+        }
+        const pending = pendingMobileApprovals.get(id);
+        if (!pending) {
+          res.writeHead(404, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "request not found or expired" }));
+          return;
+        }
+        clearTimeout(pending.timer);
+        pendingMobileApprovals.delete(id);
+        try { pending.resolve(decision); } catch {}
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+      });
+      return;
+    }
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      });
+      res.end();
+      return;
+    }
+
+    res.writeHead(404);
+    res.end();
+  });
+
+  mobileHttpServer.on("error", (err) => {
+    if (err.code === "EADDRINUSE") {
+      console.warn(`[mobile-sse] Port ${MOBILE_PORT} occupied, mobile SSE disabled`);
+    } else {
+      console.error("[mobile-sse] Server error:", err.message);
+    }
+  });
+
+  mobileHttpServer.listen(MOBILE_PORT, "0.0.0.0", () => {
+    mobileServerPort = MOBILE_PORT;
+    console.log(`[mobile-sse] Listening on 0.0.0.0:${MOBILE_PORT}`);
+  });
+}
+
+function stopMobileServer() {
+  for (const client of mobileSSEClients) {
+    try { client.end(); } catch {}
+  }
+  mobileSSEClients.clear();
+  for (const [, pending] of pendingMobileApprovals) {
+    try { clearTimeout(pending.timer); } catch {}
+  }
+  pendingMobileApprovals.clear();
+  if (mobileHttpServer) {
+    mobileHttpServer.close();
+    mobileHttpServer = null;
+  }
+}
+
 function cleanup() {
+  stopMobileServer();
   clearRuntimeConfigFn();
   stopClaudeSettingsWatcher();
   if (mobileWS && mobileWS._mdnsService) {
@@ -556,6 +664,9 @@ return {
   getMobileApprovalClient: () => mobileApprovalClient,
   getHookServerPort: () => activeServerPort,
   saveMobileState,
+  broadcastHookEvent,
+  startMobileServer,
+  getPendingMobileApprovals: () => pendingMobileApprovals,
 };
 
 };

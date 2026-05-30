@@ -350,7 +350,7 @@ private fun NotificationSection(prefsStore: PrefsStore) {
         modifier = Modifier.padding(bottom = 4.dp)
     )
     Text(
-        "App 进入后台时保持 WebSocket 连接，确保实时接收会话更新和通知。",
+        "App 进入后台时保持连接，确保实时接收会话更新和通知。",
         fontSize = 12.sp,
         color = ClawdFaintDark,
         modifier = Modifier.padding(bottom = 8.dp)
@@ -430,7 +430,7 @@ private fun AboutSection() {
 
     Spacer(modifier = Modifier.height(8.dp))
     Text(
-        "Clawd Mobile 通过 WebSocket 与 PC 端通信，支持实时会话监控、权限审批、状态通知等功能。",
+        "Clawd Mobile 通过 SSE 与 PC 端通信，支持实时会话监控、权限审批、状态通知等功能。",
         fontSize = 11.sp,
         color = ClawdFaintDark
     )

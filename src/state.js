@@ -1292,6 +1292,7 @@ function dismissSession(sessionId) {
   if (!session) return false;
   if (session.agentId === "codex") cancelCodexExitProbe(id, "session-hidden");
   sessions.delete(id);
+  if (typeof ctx.onSessionRemoved === "function") ctx.onSessionRemoved(id);
   if (session.agentId === "kimi-cli") disposeKimiSessionState(id, "kimi-session-hidden");
   const resolved = resolveDisplayState();
   setState(resolved, getSvgOverride(resolved));

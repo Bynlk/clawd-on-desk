@@ -44,6 +44,7 @@ function handleStatePost(req, res, options) {
     codexOfficialTurns,
     pathApi = path,
     mobileWS,
+    broadcastHookEvent,
   } = options;
   let body = "";
   let bodySize = 0;
@@ -172,6 +173,9 @@ function handleStatePost(req, res, options) {
               svg: safeSvg,
             });
           }
+          if (typeof broadcastHookEvent === "function") {
+            broadcastHookEvent({ type: "state", sessionId: "__global__", state, event: "setState", svg: safeSvg, timestamp: Date.now() });
+          }
         } else {
           ctx.updateSession(sid, state, event, {
             sourcePid: source_pid,
@@ -210,6 +214,9 @@ function handleStatePost(req, res, options) {
               recentEvents,
               lastOutput,
             });
+            if (typeof broadcastHookEvent === "function") {
+              broadcastHookEvent({ type: "state", sessionId: sid, state, event, agentId, toolName: toolName || null, sessionTitle: sessionTitle || null, cwd: cwd || null, recentEvents, lastOutput, timestamp: Date.now() });
+            }
 
             // Forward tool output to mobile clients
             if (data.tool_result || data.output) {
@@ -222,6 +229,9 @@ function handleStatePost(req, res, options) {
                 output: truncated,
                 event: event || "",
               });
+              if (typeof broadcastHookEvent === "function") {
+                broadcastHookEvent({ type: "tool_output", sessionId: sid, toolName: toolName || event || "", output: truncated, event: event || "", timestamp: Date.now() });
+              }
               // Store last output on session
               if (session) {
                 session.lastOutput = {

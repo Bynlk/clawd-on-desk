@@ -535,13 +535,20 @@
         var now = Date.now();
         var changed = false;
         self.sessions.forEach(function(s, sid) {
-          if (s.state === "sleeping" && now - (s.updatedAt || 0) > STALE_TIMEOUT_MS) {
+          var age = now - (s.updatedAt || 0);
+          // sleeping > 30s: likely ended while we were disconnected
+          if (s.state === "sleeping" && age > 30000) {
+            self.sessions.delete(sid);
+            changed = true;
+          }
+          // any session idle > 10min: server would have cleaned it up
+          else if (age > 10 * 60 * 1000) {
             self.sessions.delete(sid);
             changed = true;
           }
         });
         if (changed) self.render();
-      }, 30000);
+      }, 15000);
     }
   }
 

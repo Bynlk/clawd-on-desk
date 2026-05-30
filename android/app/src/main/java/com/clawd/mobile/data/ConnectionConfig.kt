@@ -8,7 +8,9 @@ data class ConnectionConfig(
     val port: Int,
     val token: String
 ) {
-    fun wsUrl(): String = "ws://$host:$port/ws?token=$token"
+    fun streamUrl(): String = "http://$host:$port/mobile/stream"
+
+    fun approveUrl(): String = "http://$host:$port/mobile/approve"
 
     fun pairUrl(): String = "clawd://$host:$port/$token"
 

@@ -5,16 +5,20 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.*
 import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.sse.EventSource
+import okhttp3.sse.EventSourceListener
+import okhttp3.sse.EventSources
 import java.util.concurrent.TimeUnit
 
 class ClawdWebSocket(private val prefsStore: PrefsStore) {
 
     private val client = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.MILLISECONDS)
-        .pingInterval(30, TimeUnit.SECONDS)
         .build()
 
-    private var ws: WebSocket? = null
+    private var eventSource: EventSource? = null
     private var config: ConnectionConfig? = null
     private var reconnectDelay = 1000L
     private val maxReconnectDelay = 30000L
@@ -22,6 +26,7 @@ class ClawdWebSocket(private val prefsStore: PrefsStore) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+    private val sseFactory: EventSource.Factory = EventSources.createFactory(client)
 
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
     val connectionState: StateFlow<ConnectionState> = _connectionState
@@ -35,15 +40,8 @@ class ClawdWebSocket(private val prefsStore: PrefsStore) {
     private val _permissionRequests = MutableSharedFlow<PermissionRequestData>(extraBufferCapacity = 16)
     val permissionRequests: SharedFlow<PermissionRequestData> = _permissionRequests
 
-    private var _serverDisconnect = false
-
-    private val _serverDisconnectEvent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val serverDisconnectEvent: SharedFlow<Unit> = _serverDisconnectEvent
-
     val currentHost: String? get() = config?.host
     val currentPort: Int? get() = config?.port
-
-    private var rawTextHandler: ((String) -> Unit)? = null
 
     fun connect(config: ConnectionConfig) {
         this.config = config
@@ -60,41 +58,39 @@ class ClawdWebSocket(private val prefsStore: PrefsStore) {
 
     fun disconnect() {
         reconnectJob?.cancel()
-        ws?.close(1000, "User disconnect")
-        ws = null
+        eventSource?.cancel()
+        eventSource = null
         _connectionState.value = ConnectionState.DISCONNECTED
+        _sessions.value = emptyMap()
     }
 
     private fun doConnect() {
         val cfg = config ?: return
         reconnectJob?.cancel()
+        eventSource?.cancel()
 
         _connectionState.value = if (reconnectDelay > 1000) ConnectionState.RECONNECTING else ConnectionState.CONNECTING
 
-        val request = Request.Builder().url(cfg.wsUrl()).build()
+        val request = Request.Builder()
+            .url(cfg.streamUrl())
+            .build()
 
-        ws = client.newWebSocket(request, object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
+        eventSource = sseFactory.newEventSource(request, object : EventSourceListener() {
+            override fun onOpen(eventSource: EventSource, response: Response) {
                 reconnectDelay = 1000L
                 _connectionState.value = ConnectionState.CONNECTED
             }
 
-            override fun onMessage(webSocket: WebSocket, text: String) {
-                handleMessage(text)
+            override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
+                handleMessage(data)
             }
 
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                android.util.Log.w("ClawdWS", "Closed: code=$code reason=$reason")
-                if (_serverDisconnect) {
-                    _serverDisconnect = false
-                    return
-                }
+            override fun onClosed(eventSource: EventSource) {
                 scheduleReconnect()
             }
 
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                android.util.Log.e("ClawdWS", "Connection failed: ${t.message}", t)
-                if (response?.code == 401 || response?.message?.contains("Invalid token") == true) {
+            override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
+                if (response?.code == 401) {
                     _connectionState.value = ConnectionState.AUTH_FAILED
                     return
                 }
@@ -104,62 +100,101 @@ class ClawdWebSocket(private val prefsStore: PrefsStore) {
     }
 
     private fun handleMessage(rawText: String) {
-        val msg = MessageParser.parse(rawText) ?: return
+        val obj = try { json.decodeFromString<JsonObject>(rawText) } catch (_: Exception) { return }
+        val type = obj["type"]?.jsonPrimitive?.contentOrNull ?: return
 
-        when (msg.type) {
+        when (type) {
+            "connected" -> { /* SSE handshake confirmed */ }
+
             "snapshot" -> {
-                _sessions.value = msg.sessions ?: emptyMap()
+                val sessionsObj = obj["sessions"]?.jsonObject ?: return
+                val map = mutableMapOf<String, SessionData>()
+                for ((sid, el) in sessionsObj) {
+                    try { map[sid] = json.decodeFromJsonElement<SessionData>(el) } catch (_: Exception) {}
+                }
+                _sessions.value = map
             }
+
             "state" -> {
-                val sid = msg.sessionId ?: return
-                val data = msg.data ?: return
+                val sid = obj["sessionId"]?.jsonPrimitive?.contentOrNull ?: return
+                val recentEvents = try {
+                    obj["recentEvents"]?.jsonArray?.map { el ->
+                        val o = el.jsonObject
+                        RecentEvent(
+                            at = o["at"]?.jsonPrimitive?.longOrNull ?: 0L,
+                            event = o["event"]?.jsonPrimitive?.contentOrNull,
+                            state = o["state"]?.jsonPrimitive?.contentOrNull,
+                        )
+                    } ?: emptyList()
+                } catch (_: Exception) { emptyList() }
+                val lastOutput = try {
+                    obj["lastOutput"]?.jsonObject?.let { o ->
+                        LastOutput(
+                            toolName = o["toolName"]?.jsonPrimitive?.contentOrNull ?: "",
+                            output = o["output"]?.jsonPrimitive?.contentOrNull ?: "",
+                            at = o["at"]?.jsonPrimitive?.longOrNull ?: 0L,
+                        )
+                    }
+                } catch (_: Exception) { null }
+                val data = SessionData(
+                    state = obj["state"]?.jsonPrimitive?.contentOrNull ?: "idle",
+                    event = obj["event"]?.jsonPrimitive?.contentOrNull,
+                    agentId = obj["agentId"]?.jsonPrimitive?.contentOrNull,
+                    toolName = obj["toolName"]?.jsonPrimitive?.contentOrNull,
+                    sessionTitle = obj["sessionTitle"]?.jsonPrimitive?.contentOrNull,
+                    cwd = obj["cwd"]?.jsonPrimitive?.contentOrNull,
+                    updatedAt = obj["timestamp"]?.jsonPrimitive?.longOrNull,
+                    recentEvents = recentEvents,
+                    lastOutput = lastOutput,
+                )
                 _sessions.value = _sessions.value.toMutableMap().apply { put(sid, data) }
             }
+
+            "tool_output" -> {
+                val sid = obj["sessionId"]?.jsonPrimitive?.contentOrNull ?: return
+                val existing = _sessions.value[sid] ?: return
+                val updated = existing.copy(
+                    lastOutput = LastOutput(
+                        toolName = obj["toolName"]?.jsonPrimitive?.contentOrNull ?: "",
+                        output = obj["output"]?.jsonPrimitive?.contentOrNull ?: "",
+                        at = obj["timestamp"]?.jsonPrimitive?.longOrNull ?: 0L,
+                    )
+                )
+                _sessions.value = _sessions.value.toMutableMap().apply { put(sid, updated) }
+            }
+
             "session_deleted" -> {
-                val sid = msg.sessionId ?: return
+                val sid = obj["sessionId"]?.jsonPrimitive?.contentOrNull ?: return
                 _sessions.value = _sessions.value.toMutableMap().apply { remove(sid) }
             }
+
             "permission_request" -> {
                 scope.launch {
                     try {
-                        val obj = json.decodeFromString<JsonObject>(rawText)
-                        val dataObj = obj["data"]?.jsonObject
-                        val requestId = obj["requestId"]?.jsonPrimitive?.contentOrNull
-                        if (dataObj != null) {
-                            val permData = PermissionRequestData(
-                                agentId = dataObj["agentId"]?.jsonPrimitive?.contentOrNull,
-                                toolName = dataObj["toolName"]?.jsonPrimitive?.contentOrNull,
-                                toolInputSummary = dataObj["toolInputSummary"]?.jsonPrimitive?.contentOrNull,
-                                sessionId = obj["sessionId"]?.jsonPrimitive?.contentOrNull,
-                                requestId = requestId,
-                                suggestions = try {
-                                    dataObj["suggestions"]?.jsonArray?.map { s ->
-                                        val so = s.jsonObject
-                                        PermissionSuggestion(
-                                            label = so["label"]?.jsonPrimitive?.content ?: "",
-                                            behavior = so["behavior"]?.jsonPrimitive?.content ?: "allow",
-                                            rule = so["rule"]?.jsonPrimitive?.contentOrNull
-                                        )
-                                    } ?: emptyList()
-                                } catch (_: Exception) { emptyList() },
-                                timeout = dataObj["timeout"]?.jsonPrimitive?.longOrNull ?: 90000,
-                            )
-                            _permissionRequests.emit(permData)
-                        }
+                        val data = PermissionRequestData(
+                            agentId = obj["agentId"]?.jsonPrimitive?.contentOrNull,
+                            toolName = obj["toolName"]?.jsonPrimitive?.contentOrNull,
+                            sessionId = obj["sessionId"]?.jsonPrimitive?.contentOrNull,
+                            requestId = obj["id"]?.jsonPrimitive?.contentOrNull,
+                            timeout = obj["timeout"]?.jsonPrimitive?.longOrNull ?: 60000,
+                        )
+                        _permissionRequests.emit(data)
                     } catch (_: Exception) {}
                 }
             }
+
             "elicitation_request" -> {
                 scope.launch {
                     try {
-                        val obj = json.decodeFromString<JsonObject>(rawText)
-                        val dataObj = obj["data"]?.jsonObject
-                        if (dataObj != null) {
-                            val elicitData = ElicitationRequestData(
+                        val dataObj = obj["data"]?.jsonObject ?: obj
+                        _permissionRequests.emit(
+                            PermissionRequestData(
                                 agentId = dataObj["agentId"]?.jsonPrimitive?.contentOrNull,
-                                prompt = dataObj["prompt"]?.jsonPrimitive?.contentOrNull,
+                                toolName = "elicitation",
+                                toolInputSummary = dataObj["prompt"]?.jsonPrimitive?.contentOrNull,
                                 sessionId = obj["sessionId"]?.jsonPrimitive?.contentOrNull,
-                                options = try {
+                                requestId = obj["id"]?.jsonPrimitive?.contentOrNull ?: obj["requestId"]?.jsonPrimitive?.contentOrNull,
+                                elicitationOptions = try {
                                     dataObj["options"]?.jsonArray?.map { o ->
                                         val oo = o.jsonObject
                                         ElicitationOption(
@@ -169,44 +204,60 @@ class ClawdWebSocket(private val prefsStore: PrefsStore) {
                                     } ?: emptyList()
                                 } catch (_: Exception) { emptyList() },
                             )
-                            // Elicitation requests also go through permission flow
-                            _permissionRequests.emit(
-                                PermissionRequestData(
-                                    agentId = elicitData.agentId,
-                                    toolName = "elicitation",
-                                    toolInputSummary = elicitData.prompt,
-                                    sessionId = elicitData.sessionId,
-                                    elicitationOptions = elicitData.options,
-                                    requestId = obj["requestId"]?.jsonPrimitive?.contentOrNull,
-                                )
-                            )
-                        }
+                        )
                     } catch (_: Exception) {}
                 }
             }
-            "disconnect" -> {
-                _serverDisconnect = true
-                _connectionState.value = ConnectionState.DISCONNECTED
-                reconnectJob?.cancel()
-                ws?.close(1000, "Server disconnect")
-                ws = null
-                scope.launch { _serverDisconnectEvent.emit(Unit) }
-            }
         }
 
-        scope.launch { _messages.emit(msg) }
+        scope.launch {
+            val msg = WsMessage(
+                type = type,
+                timestamp = obj["timestamp"]?.jsonPrimitive?.longOrNull ?: 0,
+                sessionId = obj["sessionId"]?.jsonPrimitive?.contentOrNull,
+            )
+            _messages.emit(msg)
+        }
     }
 
     fun sendPermissionResponse(requestId: String, behavior: String, suggestionIndex: Int? = null) {
-        ws?.send(MessageParser.encodePermissionResponse(requestId, behavior, suggestionIndex))
+        val cfg = config ?: return
+        scope.launch(Dispatchers.IO) {
+            try {
+                val body = buildJsonObject {
+                    put("id", requestId)
+                    put("decision", behavior)
+                    if (suggestionIndex != null) put("suggestionIndex", suggestionIndex)
+                }.toString()
+                val request = Request.Builder()
+                    .url(cfg.approveUrl())
+                    .post(body.toRequestBody("application/json".toMediaType()))
+                    .build()
+                client.newCall(request).execute().close()
+            } catch (_: Exception) {}
+        }
     }
 
     fun sendElicitationResponse(requestId: String, answers: Map<String, String>) {
-        ws?.send(MessageParser.encodeElicitationResponse(requestId, answers))
+        val cfg = config ?: return
+        scope.launch(Dispatchers.IO) {
+            try {
+                val body = buildJsonObject {
+                    put("id", requestId)
+                    put("decision", answers["choice"] ?: "allow")
+                }.toString()
+                val request = Request.Builder()
+                    .url(cfg.approveUrl())
+                    .post(body.toRequestBody("application/json".toMediaType()))
+                    .build()
+                client.newCall(request).execute().close()
+            } catch (_: Exception) {}
+        }
     }
 
     private fun scheduleReconnect() {
         _connectionState.value = ConnectionState.RECONNECTING
+        _sessions.value = emptyMap()
         reconnectJob = scope.launch {
             delay(reconnectDelay)
             reconnectDelay = (reconnectDelay * 2).coerceAtMost(maxReconnectDelay)
@@ -216,6 +267,7 @@ class ClawdWebSocket(private val prefsStore: PrefsStore) {
 
     fun destroy() {
         scope.cancel()
-        ws?.close(1001, "Destroying")
+        eventSource?.cancel()
+        eventSource = null
     }
 }

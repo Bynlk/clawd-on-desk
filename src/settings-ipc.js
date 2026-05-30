@@ -468,7 +468,7 @@ function registerSettingsIpc(options = {}) {
       enabled: true,
       token: getMobileToken() || null,
       ip: getLanIP(),
-      port: getHookServerPort() || null,
+      port: 23334,
       clients: mobileWS.getClientInfoList ? mobileWS.getClientInfoList() : [],
       connectionHistory: mobileWS.getConnectionHistory ? mobileWS.getConnectionHistory() : [],
     };
@@ -480,7 +480,7 @@ function registerSettingsIpc(options = {}) {
 
   handle("settings:mobile-qr-data-url", async () => {
     if (!QRCode) return { dataUrl: null, error: "QRCode library unavailable" };
-    const port = getHookServerPort();
+    const port = 23334;
     const token = getMobileToken();
     if (!port || !token) return { dataUrl: null, error: "mobile server not ready" };
     const ip = getLanIP();

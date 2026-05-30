@@ -20,7 +20,7 @@ fun ManualScreen(
     onConnect: (ConnectionConfig) -> Unit
 ) {
     var host by remember { mutableStateOf("") }
-    var port by remember { mutableStateOf("23333") }
+    var port by remember { mutableStateOf("23334") }
     var token by remember { mutableStateOf("") }
     var showError by remember { mutableStateOf(false) }
     val history = remember { mutableStateOf(prefsStore.getHistory()) }
@@ -57,7 +57,7 @@ fun ManualScreen(
                 value = port,
                 onValueChange = { port = it },
                 label = { Text("端口") },
-                placeholder = { Text("23333") },
+                placeholder = { Text("23334") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth()

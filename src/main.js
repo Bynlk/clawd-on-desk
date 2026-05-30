@@ -1133,6 +1133,7 @@ const _stateCtx = {
   onSessionRemoved: (sessionId) => {
     const ws = getMobileWS();
     if (ws) ws.removeSession(sessionId);
+    broadcastHookEvent({ type: "session_deleted", sessionId, timestamp: Date.now() });
   },
   // Phase 3b: 读 prefs.themeOverrides 判断某个 oneshot state 是否被用户禁用。
   // state.js gate 调这个做 early-return。不做白名单校验——settings-actions
@@ -1373,7 +1374,53 @@ const _serverCtx = {
   permLog,
 };
 const _server = require("./server")(_serverCtx);
-const { startHttpServer, getHookServerPort, getMobileWS, getMobileToken, getMobileApprovalClient, saveMobileState } = _server;
+const { startHttpServer, getHookServerPort, getMobileWS, getMobileToken, getMobileApprovalClient, saveMobileState, broadcastHookEvent, startMobileServer, getPendingMobileApprovals } = _server;
+
+// 移动端 SSE 权限审批桥接：覆盖 _serverCtx.addPendingPermission（server-route-permission.js
+// 实际调用的路径），将权限请求广播到 SSE，并存储到 pendingMobileApprovals 供 /mobile/approve 回调。
+const _origAddPendingPermission = _serverCtx.addPendingPermission;
+_serverCtx.addPendingPermission = function(permEntry) {
+  _origAddPendingPermission(permEntry);
+  if (permEntry && permEntry.res && permEntry.agentId !== "opencode") {
+    const id = "mobile_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+    permEntry._mobileApprovalId = id;
+    broadcastHookEvent({
+      type: "permission_request",
+      id,
+      sessionId: permEntry.sessionId,
+      toolName: permEntry.toolName,
+      agentId: permEntry.agentId,
+      timestamp: Date.now(),
+    });
+    const pendingApprovals = getPendingMobileApprovals();
+    const timer = setTimeout(() => {
+      if (!pendingApprovals.has(id)) return;
+      pendingApprovals.delete(id);
+      try { resolvePermissionEntry(permEntry, "deny", "Mobile approval timed out"); } catch {}
+    }, 60000);
+    pendingApprovals.set(id, {
+      entry: permEntry,
+      timer,
+      resolve: (decision) => {
+        try { resolvePermissionEntry(permEntry, decision, "Mobile approval"); } catch {}
+      },
+    });
+  }
+  return permEntry;
+};
+const _origRemovePendingPermission = _serverCtx.removePendingPermission;
+_serverCtx.removePendingPermission = function(permEntry, reason) {
+  const result = _origRemovePendingPermission(permEntry, reason);
+  if (permEntry && permEntry._mobileApprovalId) {
+    const pendingApprovals = getPendingMobileApprovals();
+    const pending = pendingApprovals.get(permEntry._mobileApprovalId);
+    if (pending) {
+      clearTimeout(pending.timer);
+      pendingApprovals.delete(permEntry._mobileApprovalId);
+    }
+  }
+  return result;
+};
 
 function updateLog(msg) {
   if (!updateDebugLog) return;
@@ -2592,6 +2639,7 @@ function createWindow() {
   initFocusHelper();
   startMainTick();
   startHttpServer();
+  startMobileServer();
   startStaleCleanup();
   // Wait for renderer to be ready before sending initial state
   // If hooks arrived during startup, respect them instead of forcing idle

@@ -5,7 +5,9 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.net.wifi.WifiManager
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.clawd.mobile.ClawdApp
 import com.clawd.mobile.MainActivity
@@ -56,6 +58,8 @@ class WebSocketService : Service() {
         private set
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var stateCollectorJob: Job? = null
+    private var wifiLock: WifiManager.WifiLock? = null
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -67,6 +71,7 @@ class WebSocketService : Service() {
         when (intent?.action) {
             ACTION_CONNECT -> {
                 startForeground(NOTIFICATION_ID, buildNotification("连接中..."))
+                acquireLocks()
                 val host = intent.getStringExtra("host")
                 val port = intent.getIntExtra("port", 0)
                 val token = intent.getStringExtra("token")
@@ -79,12 +84,14 @@ class WebSocketService : Service() {
             }
             ACTION_DISCONNECT -> {
                 webSocket?.disconnect()
+                releaseLocks()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
             else -> {
                 // Service restarted by system
                 startForeground(NOTIFICATION_ID, buildNotification("已断开"))
+                acquireLocks()
                 webSocket?.reconnect()
                 startStateCollector()
             }
@@ -95,27 +102,18 @@ class WebSocketService : Service() {
     private fun startStateCollector() {
         stateCollectorJob?.cancel()
         stateCollectorJob = scope.launch {
-            launch {
-                webSocket?.connectionState?.collect { state ->
-                    val status = when (state) {
-                        ConnectionState.CONNECTED -> "已连接 - ${webSocket?.currentHost ?: ""}"
-                        ConnectionState.CONNECTING -> "连接中..."
-                        ConnectionState.RECONNECTING -> "重新连接中..."
-                        ConnectionState.AUTH_FAILED -> "认证失败"
-                        ConnectionState.DISCONNECTED -> "已断开"
-                    }
-                    try {
-                        val nm = getSystemService(android.app.NotificationManager::class.java)
-                        nm.notify(NOTIFICATION_ID, buildNotification(status))
-                    } catch (_: Exception) {}
+            webSocket?.connectionState?.collect { state ->
+                val status = when (state) {
+                    ConnectionState.CONNECTED -> "已连接 - ${webSocket?.currentHost ?: ""}"
+                    ConnectionState.CONNECTING -> "连接中..."
+                    ConnectionState.RECONNECTING -> "重新连接中..."
+                    ConnectionState.AUTH_FAILED -> "认证失败"
+                    ConnectionState.DISCONNECTED -> "已断开"
                 }
-            }
-            launch {
-                webSocket?.serverDisconnectEvent?.collect {
-                    webSocket?.disconnect()
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
-                }
+                try {
+                    val nm = getSystemService(android.app.NotificationManager::class.java)
+                    nm.notify(NOTIFICATION_ID, buildNotification(status))
+                } catch (_: Exception) {}
             }
         }
     }
@@ -136,10 +134,35 @@ class WebSocketService : Service() {
             .build()
     }
 
+    private fun acquireLocks() {
+        if (wifiLock == null) {
+            val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL, "clawd:sse").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+        }
+        if (wakeLock == null) {
+            val pm = applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "clawd:sse").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+        }
+    }
+
+    private fun releaseLocks() {
+        try { wifiLock?.release() } catch (_: Exception) {}
+        wifiLock = null
+        try { wakeLock?.release() } catch (_: Exception) {}
+        wakeLock = null
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
         stateCollectorJob?.cancel()
+        releaseLocks()
         scope.cancel()
         webSocket?.destroy()
         webSocket = null
