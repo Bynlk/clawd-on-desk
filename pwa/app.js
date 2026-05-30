@@ -25,20 +25,44 @@
   };
 
   var EVENT_LABELS_CN = {
-    UserPromptSubmit: "用户输入",
-    PreToolUse: "工具启动",
-    PostToolUse: "工具完成",
-    PostToolUseFailure: "工具失败",
-    Stop: "已完成",
-    SessionStart: "会话开始",
-    SessionEnd: "会话结束",
-    PermissionRequest: "需要权限",
-    Notification: "通知",
-    SubagentStart: "子代理启动",
-    SubagentStop: "子代理停止",
+    UserPromptSubmit: "用户输入", PreToolUse: "工具启动", PostToolUse: "工具完成",
+    PostToolUseFailure: "工具失败", Stop: "已完成", SessionStart: "会话开始",
+    SessionEnd: "会话结束", PermissionRequest: "需要权限", Notification: "通知",
+    SubagentStart: "子代理启动", SubagentStop: "子代理停止",
   };
 
-  var STALE_TIMEOUT_MS = 5 * 60 * 1000;
+  var SETTINGS_SECTIONS = [
+    { key: "connection", label: "连接", fields: [
+      { key: "host", label: "地址", type: "text" },
+      { key: "port", label: "端口", type: "number" },
+      { key: "token", label: "Token", type: "text" },
+    ]},
+    { key: "general", label: "通用", fields: [
+      { key: "lang", label: "语言" },
+      { key: "showTray", label: "显示托盘图标", type: "boolean" },
+      { key: "showDock", label: "显示 Dock 图标", type: "boolean" },
+      { key: "openAtLogin", label: "开机自启", type: "boolean" },
+      { key: "bubbleFollowPet", label: "气泡跟随宠物", type: "boolean" },
+    ]},
+    { key: "session", label: "会话", fields: [
+      { key: "sessionHudEnabled", label: "会话 HUD", type: "boolean" },
+      { key: "sessionHudShowStateLabels", label: "显示状态标签", type: "boolean" },
+      { key: "sessionHudShowElapsed", label: "显示经过时间", type: "boolean" },
+      { key: "sessionHudCleanupDetached", label: "清理已断开会话", type: "boolean" },
+    ]},
+    { key: "bubbles", label: "气泡 & 通知", fields: [
+      { key: "permissionBubblesEnabled", label: "权限气泡", type: "boolean" },
+      { key: "soundMuted", label: "静音", type: "boolean" },
+      { key: "soundVolume", label: "音量", type: "range" },
+    ]},
+    { key: "visual", label: "视觉", fields: [
+      { key: "theme", label: "主题" },
+      { key: "flashTaskbarOnComplete", label: "完成时闪烁任务栏", type: "boolean" },
+      { key: "lowPowerIdleMode", label: "低功耗空闲模式", type: "boolean" },
+    ]},
+    { key: "agents", label: "代理", fields: [] },
+  ];
+
   var MAX_HISTORY = 5;
 
   // === Utilities ===
@@ -101,10 +125,7 @@
   // === NotificationManager ===
 
   class NotificationManager {
-    constructor() {
-      this.permission = "default";
-      this.lastStates = new Map();
-    }
+    constructor() { this.permission = "default"; this.lastStates = new Map(); }
 
     requestPermission() {
       if (!("Notification" in window)) return;
@@ -116,8 +137,7 @@
     }
 
     onStateChange(sessionId, data) {
-      if (this.permission !== "granted") return;
-      if (document.visibilityState === "visible") return;
+      if (this.permission !== "granted" || document.visibilityState === "visible") return;
       var prev = this.lastStates.get(sessionId);
       this.lastStates.set(sessionId, data.state);
       var s = data.state;
@@ -131,8 +151,7 @@
     }
 
     onApprovalNeeded(data) {
-      if (this.permission !== "granted") return;
-      if (document.visibilityState === "visible") return;
+      if (this.permission !== "granted" || document.visibilityState === "visible") return;
       this._notify("需要操作", (data.agentId || "Agent") + " 请求权限", "notification");
     }
 
@@ -159,17 +178,13 @@
     }
 
     showRequest(msg) {
-      var requestId = msg.requestId;
-      if (!requestId) return;
-      this.pending.set(requestId, msg);
+      if (!msg.requestId) return;
+      this.pending.set(msg.requestId, msg);
       this._render();
-      log("Approval request: " + (msg.data ? msg.data.toolName || msg.data.prompt || "unknown" : "unknown"));
+      log("Approval: " + (msg.data ? msg.data.toolName || msg.data.prompt || "?" : "?"));
     }
 
-    dismiss(requestId) {
-      this.pending.delete(requestId);
-      this._render();
-    }
+    dismiss(requestId) { this.pending.delete(requestId); this._render(); }
 
     _render() {
       if (this.pending.size === 0) {
@@ -177,22 +192,16 @@
         this.overlay.innerHTML = "";
         return;
       }
-
       var self = this;
       var html = '<div class="approval-sheet">';
-
       this.pending.forEach(function(msg, requestId) {
         var data = msg.data || {};
-        var isPermission = msg.type === "permission_request";
-
+        var isPerm = msg.type === "permission_request";
         html += '<div class="approval-card">';
-        html += '<div class="approval-header">';
-        html += '<span class="approval-icon">' + icon("shield") + '</span>';
+        html += '<div class="approval-header"><span class="approval-icon">' + icon("shield") + '</span>';
         html += '<span class="approval-agent">' + esc(data.agentId || "Agent") + '</span>';
-        html += '<span class="approval-type">' + (isPermission ? "权限请求" : "选择操作") + '</span>';
-        html += '</div>';
-
-        if (isPermission) {
+        html += '<span class="approval-type">' + (isPerm ? "权限请求" : "选择操作") + '</span></div>';
+        if (isPerm) {
           if (data.toolName) html += '<div class="approval-tool">' + icon("tool") + ' ' + esc(data.toolName) + '</div>';
           if (data.toolInputSummary) html += '<div class="approval-summary">' + esc(data.toolInputSummary) + '</div>';
           html += '<div class="approval-actions">';
@@ -210,37 +219,28 @@
         } else {
           if (data.prompt) html += '<div class="approval-summary">' + esc(data.prompt) + '</div>';
           html += '<div class="approval-actions">';
-          if (data.options && data.options.length > 0) {
-            for (var j = 0; j < data.options.length; j++) {
-              var opt = data.options[j];
-              html += '<button class="approval-btn neutral" data-request="' + requestId + '" data-elicitation="true" data-value="' + esc(opt.value || "") + '">' + esc(opt.label || opt.value || "选择") + '</button>';
-            }
+          if (data.options) for (var j = 0; j < data.options.length; j++) {
+            var opt = data.options[j];
+            html += '<button class="approval-btn neutral" data-request="' + requestId + '" data-elicitation="true" data-value="' + esc(opt.value || "") + '">' + esc(opt.label || opt.value || "选择") + '</button>';
           }
           html += '</div>';
         }
-
-        var timeout = data.timeout || 90000;
-        html += '<div class="approval-timer"><div class="approval-timer-bar" style="animation-duration:' + timeout + 'ms"></div></div>';
+        html += '<div class="approval-timer"><div class="approval-timer-bar" style="animation-duration:' + (data.timeout || 90000) + 'ms"></div></div>';
         html += '</div>';
       });
-
       html += '</div>';
       this.overlay.innerHTML = html;
       this.overlay.classList.remove("hidden");
-
       this.overlay.querySelectorAll(".approval-btn").forEach(function(btn) {
         btn.addEventListener("click", function() {
           var rid = this.getAttribute("data-request");
           var behavior = this.getAttribute("data-behavior");
-          var isElicitation = this.getAttribute("data-elicitation") === "true";
-          var value = this.getAttribute("data-value");
-
-          if (isElicitation) {
-            if (self.onSend) self.onSend({ type: "elicitation_response", requestId: rid, answers: { value: value } });
+          if (this.getAttribute("data-elicitation") === "true") {
+            if (self.onSend) self.onSend({ type: "elicitation_response", requestId: rid, answers: { value: this.getAttribute("data-value") } });
           } else {
-            var suggestionIndex = this.getAttribute("data-index");
+            var idx = this.getAttribute("data-index");
             var payload = { type: "permission_response", requestId: rid, behavior: behavior };
-            if (suggestionIndex !== null && suggestionIndex !== "") payload.suggestionIndex = parseInt(suggestionIndex, 10);
+            if (idx !== null && idx !== "") payload.suggestionIndex = parseInt(idx, 10);
             if (self.onSend) self.onSend(payload);
           }
           self.dismiss(rid);
@@ -253,14 +253,10 @@
 
   class ConnectionManager {
     constructor() {
-      this.ws = null;
-      this.config = null;
-      this.reconnectDelay = 1000;
-      this.maxReconnectDelay = 30000;
-      this.reconnectTimer = null;
-      this.state = "disconnected";
-      this.onStateChange = null;
-      this.onMessage = null;
+      this.ws = null; this.config = null;
+      this.reconnectDelay = 1000; this.maxReconnectDelay = 30000;
+      this.reconnectTimer = null; this.state = "disconnected";
+      this.onStateChange = null; this.onMessage = null; this.onDisconnected = null;
     }
 
     connect(config) {
@@ -271,150 +267,77 @@
 
     _doConnect() {
       if (this.ws) { try { this.ws.close(); } catch {} }
-      var host = this.config.host;
-      var port = this.config.port;
-      var token = this.config.token;
-      var url = "ws://" + host + ":" + port + "/ws?token=" + token;
-
+      var url = "ws://" + this.config.host + ":" + this.config.port + "/ws?token=" + this.config.token;
       this._setState("connecting");
-      log("Connecting to " + host + ":" + port + "...");
-
-      try {
-        this.ws = new WebSocket(url);
-      } catch (err) {
-        log("WebSocket create failed: " + err.message);
-        this._scheduleReconnect();
-        return;
-      }
-
+      log("Connecting to " + this.config.host + ":" + this.config.port + "...");
+      try { this.ws = new WebSocket(url); } catch (err) { log("WS create failed: " + err.message); this._scheduleReconnect(); return; }
       var self = this;
-
-      this.ws.onopen = function() {
-        self.reconnectDelay = 1000;
-        self._setState("connected");
-        log("Connected");
-        showToast("已连接到桌面端", "success");
-      };
-
-      this.ws.onmessage = function(event) {
-        try {
-          var msg = JSON.parse(event.data);
-          if (self.onMessage) self.onMessage(msg);
-        } catch {}
-      };
-
+      this.ws.onopen = function() { self.reconnectDelay = 1000; self._setState("connected"); log("Connected"); showToast("已连接到桌面端", "success"); };
+      this.ws.onmessage = function(event) { try { var msg = JSON.parse(event.data); if (self.onMessage) self.onMessage(msg); } catch {} };
       this.ws.onclose = function(event) {
-        if (event.code === 1008) {
-          self._setState("auth_failed");
-          log("Auth failed (invalid token)");
-          showToast("认证失败，请重新扫码", "error");
-          return;
-        }
+        if (event.code === 1008) { self._setState("auth_failed"); log("Auth failed"); showToast("认证失败", "error"); return; }
         if (self.state === "connected") log("Disconnected (code: " + event.code + ")");
         if (self.onDisconnected) self.onDisconnected();
         self._scheduleReconnect();
       };
-
       this.ws.onerror = function() {};
     }
 
-    send(data) {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.ws.send(typeof data === "string" ? data : JSON.stringify(data));
-      }
-    }
+    send(data) { if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(typeof data === "string" ? data : JSON.stringify(data)); }
 
     _scheduleReconnect() {
       this._setState("reconnecting");
       var self = this;
-      this.reconnectTimer = setTimeout(function() {
-        self.reconnectDelay = Math.min(self.reconnectDelay * 2, self.maxReconnectDelay);
-        self._doConnect();
-      }, this.reconnectDelay);
+      this.reconnectTimer = setTimeout(function() { self.reconnectDelay = Math.min(self.reconnectDelay * 2, self.maxReconnectDelay); self._doConnect(); }, this.reconnectDelay);
     }
 
     disconnect() {
       clearTimeout(this.reconnectTimer);
       if (this.ws) { try { this.ws.close(1000, "User disconnect"); } catch {} }
-      this.ws = null;
-      this._setState("disconnected");
-      log("Disconnected by user");
+      this.ws = null; this._setState("disconnected"); log("Disconnected by user");
     }
 
-    _setState(state) {
-      this.state = state;
-      if (this.onStateChange) this.onStateChange(state);
-    }
+    _setState(state) { this.state = state; if (this.onStateChange) this.onStateChange(state); }
 
     _saveToHistory(config) {
-      var history = [];
-      try { history = JSON.parse(localStorage.getItem("clawd-history") || "[]"); } catch {}
+      var history = []; try { history = JSON.parse(localStorage.getItem("clawd-history") || "[]"); } catch {}
       var entry = { host: config.host, port: config.port, token: config.token, timestamp: Date.now() };
       var filtered = history.filter(function(h) { return h.host !== config.host || h.port !== config.port; });
       filtered.unshift(entry);
       localStorage.setItem("clawd-history", JSON.stringify(filtered.slice(0, MAX_HISTORY)));
     }
 
-    getHistory() {
-      try { return JSON.parse(localStorage.getItem("clawd-history") || "[]"); }
-      catch { return []; }
-    }
-
-    deleteHistory(index) {
-      var history = this.getHistory();
-      history.splice(index, 1);
-      localStorage.setItem("clawd-history", JSON.stringify(history));
-    }
+    getHistory() { try { return JSON.parse(localStorage.getItem("clawd-history") || "[]"); } catch { return []; } }
+    deleteHistory(index) { var h = this.getHistory(); h.splice(index, 1); localStorage.setItem("clawd-history", JSON.stringify(h)); }
   }
 
   // === SessionRenderer ===
 
   class SessionRenderer {
-    constructor(container) {
-      this.container = container;
-      this.sessions = new Map();
-      this.staleTimer = null;
-      this.expandedSet = new Set();
-    }
+    constructor(container) { this.container = container; this.sessions = new Map(); this.staleTimer = null; this.expandedSet = new Set(); }
 
     updateFromSnapshot(sessions) {
       this.sessions.clear();
-      for (var sid in sessions) {
-        if (sessions.hasOwnProperty(sid)) this.sessions.set(sid, sessions[sid]);
-      }
+      for (var sid in sessions) { if (sessions.hasOwnProperty(sid)) this.sessions.set(sid, sessions[sid]); }
       this.render();
     }
 
     updateState(sessionId, data) {
       var existing = this.sessions.get(sessionId) || {};
-      var merged = {};
-      for (var k in existing) { if (existing.hasOwnProperty(k)) merged[k] = existing[k]; }
+      var merged = {}; for (var k in existing) { if (existing.hasOwnProperty(k)) merged[k] = existing[k]; }
       for (var k2 in data) { if (data.hasOwnProperty(k2)) merged[k2] = data[k2]; }
       merged.updatedAt = Date.now();
       this.sessions.set(sessionId, merged);
       this.render();
     }
 
-    removeSession(sessionId) {
-      this.sessions.delete(sessionId);
-      this.expandedSet.delete(sessionId);
-      this.render();
-    }
-
-    toggleExpand(sid) {
-      if (this.expandedSet.has(sid)) {
-        this.expandedSet.delete(sid);
-      } else {
-        this.expandedSet.add(sid);
-      }
-      this.render();
-    }
+    removeSession(sessionId) { this.sessions.delete(sessionId); this.expandedSet.delete(sessionId); this.render(); }
+    toggleExpand(sid) { if (this.expandedSet.has(sid)) this.expandedSet.delete(sid); else this.expandedSet.add(sid); this.render(); }
 
     render() {
       var self = this;
       var entries = [];
       this.sessions.forEach(function(v, k) { entries.push([k, v]); });
-
       entries.sort(function(a, b) {
         var pa = (STATE_CONFIG[a[1].state] || STATE_CONFIG.idle).priority;
         var pb = (STATE_CONFIG[b[1].state] || STATE_CONFIG.idle).priority;
@@ -423,224 +346,205 @@
       });
 
       if (entries.length === 0) {
-        this.container.innerHTML = '<div class="empty-state" id="empty-state">' +
-          '<div class="empty-icon">' + icon("paw") + '</div>' +
-          '<div class="empty-text">扫码配对开始监控</div>' +
-          '<button id="btn-scan-empty" class="primary-btn">扫码配对</button>' +
-          '</div>';
-        var scanBtn = document.getElementById("btn-scan-empty");
-        if (scanBtn) scanBtn.addEventListener("click", function() {
-          var app = window._clawdApp;
-          if (app) app._openScanner();
-        });
+        this.container.innerHTML = '<div class="empty-state"><div class="empty-icon">' + icon("paw") + '</div>' +
+          '<div class="empty-text">连接桌面端开始监控</div>' +
+          '<div class="empty-hint">前往设置页配置连接</div></div>';
         return;
       }
 
       var html = '<div class="section-label">活跃会话 &middot; ' + entries.length + '</div>';
-      for (var i = 0; i < entries.length; i++) {
-        html += this._renderCard(entries[i][0], entries[i][1]);
-      }
+      for (var i = 0; i < entries.length; i++) html += this._renderCard(entries[i][0], entries[i][1]);
       this.container.innerHTML = html;
-
-      // bind expand toggles
       this.container.querySelectorAll(".card-footer").forEach(function(el) {
-        el.addEventListener("click", function() {
-          var sid = this.getAttribute("data-sid");
-          self.toggleExpand(sid);
-        });
+        el.addEventListener("click", function() { self.toggleExpand(this.getAttribute("data-sid")); });
       });
     }
 
     _renderCard(sid, s) {
       var config = STATE_CONFIG[s.state] || STATE_CONFIG.idle;
       var isExpanded = this.expandedSet.has(sid);
-      var events = (s.recentEvents || []);
-      var hasEvents = events.length > 0;
+      var events = s.recentEvents || [];
       var stateKey = s.state || "idle";
-
-      var html = '<div class="session-card" data-sid="' + sid + '">';
-
-      // Header: agent dot + agent name + badge
-      html += '<div class="card-header">';
-      html += '<div class="card-agent">';
-      html += '<div class="agent-dot"></div>';
-      html += '<span class="agent-name">' + esc((s.agentId || "agent").toUpperCase()) + '</span>';
-      html += '</div>';
-      html += '<span class="state-badge ' + stateKey + '">' + config.label + '</span>';
-      html += '</div>';
-
-      // Title
+      var html = '<div class="session-card">';
+      html += '<div class="card-header"><div class="card-agent"><div class="agent-dot"></div>';
+      html += '<span class="agent-name">' + esc((s.agentId || "agent").toUpperCase()) + '</span></div>';
+      html += '<span class="state-badge ' + stateKey + '">' + config.label + '</span></div>';
       html += '<div class="card-title">' + esc(s.sessionTitle || s.agentId || "") + '</div>';
-
-      // Meta row
       html += '<div class="card-meta">';
-      if (s.agentId) {
-        html += '<span class="meta-item">' + icon("tool") + '<span>Agent</span></span>';
-      }
-      if (s.cwd) {
-        html += '<div class="meta-divider"></div>';
-        html += '<span class="meta-item mono">' + icon("folder") + '<span>' + esc(shortPath(s.cwd)) + '</span></span>';
-      }
+      if (s.agentId) html += '<span class="meta-item">' + icon("tool") + '<span>Agent</span></span>';
+      if (s.cwd) { html += '<div class="meta-divider"></div>'; html += '<span class="meta-item mono">' + icon("folder") + '<span>' + esc(shortPath(s.cwd)) + '</span></span>'; }
       html += '</div>';
-
-      // Last output preview
-      if (s.lastOutput && s.lastOutput.output) {
-        html += '<div class="card-output">' + esc(s.lastOutput.output) + '</div>';
-      }
-
-      // Divider
+      if (s.lastOutput && s.lastOutput.output) html += '<div class="card-output">' + esc(s.lastOutput.output) + '</div>';
       html += '<div class="card-divider"></div>';
-
-      // Footer: events + chevron
-      html += '<div class="card-footer" data-sid="' + sid + '">';
-      html += '<div class="footer-events">';
-      html += icon("activity");
-      html += '<span>最近事件</span>';
-      if (hasEvents) {
-        html += '<span class="event-count">' + events.length + '</span>';
-      }
+      html += '<div class="card-footer" data-sid="' + sid + '"><div class="footer-events">' + icon("activity") + '<span>最近事件</span>';
+      if (events.length) html += '<span class="event-count">' + events.length + '</span>';
+      html += '</div><span class="footer-chevron">' + (isExpanded ? icon("collapse") : icon("expand")) + '</span></div>';
+      if (isExpanded && events.length) html += this._renderEvents(events);
       html += '</div>';
-      html += '<span class="footer-chevron">' + (isExpanded ? icon("collapse") : icon("expand")) + '</span>';
-      html += '</div>';
-
-      // Expanded events
-      if (isExpanded && hasEvents) {
-        html += this._renderEventHistory(events);
-      }
-
-      html += '</div>'; // .session-card
       return html;
     }
 
-    _renderEventHistory(events) {
+    _renderEvents(events) {
       var html = '<div class="event-history">';
       for (var i = 0; i < events.length; i++) {
-        var ev = events[i];
-        var evConfig = STATE_CONFIG[ev.state] || STATE_CONFIG.idle;
-        var label = eventLabel(ev.event);
-        var time = formatAgo(ev.at);
-        html += '<div class="event-row">';
-        html += '<div class="event-dot" style="background:' + evConfig.color + '"></div>';
-        html += '<div class="event-line" style="background:' + evConfig.color + '"></div>';
-        html += '<span class="event-label">' + esc(label) + '</span>';
-        html += '<span class="event-time">' + time + '</span>';
-        html += '</div>';
+        var ev = events[i]; var c = STATE_CONFIG[ev.state] || STATE_CONFIG.idle;
+        html += '<div class="event-row"><div class="event-dot" style="background:' + c.color + '"></div>';
+        html += '<div class="event-line" style="background:' + c.color + '"></div>';
+        html += '<span class="event-label">' + esc(eventLabel(ev.event)) + '</span>';
+        html += '<span class="event-time">' + formatAgo(ev.at) + '</span></div>';
       }
-      html += '</div>';
-      return html;
+      return html + '</div>';
     }
 
     startStaleCleanup() {
       var self = this;
       this.staleTimer = setInterval(function() {
-        var now = Date.now();
-        var changed = false;
+        var now = Date.now(); var changed = false;
         self.sessions.forEach(function(s, sid) {
           var age = now - (s.updatedAt || 0);
-          // sleeping > 30s: likely ended while we were disconnected
-          if (s.state === "sleeping" && age > 30000) {
-            self.sessions.delete(sid);
-            changed = true;
-          }
-          // any session idle > 10min: server would have cleaned it up
-          else if (age > 10 * 60 * 1000) {
-            self.sessions.delete(sid);
-            changed = true;
-          }
+          if ((s.state === "sleeping" && age > 30000) || age > 600000) { self.sessions.delete(sid); changed = true; }
         });
         if (changed) self.render();
       }, 15000);
     }
   }
 
-  // === QrScanner ===
+  // === SettingsRenderer ===
 
-  class QrScanner {
-    constructor(videoElement, canvasElement) {
-      this.video = videoElement;
-      this.canvas = canvasElement;
-      this.ctx = canvasElement.getContext("2d", { willReadFrequently: true });
-      this.stream = null;
-      this.scanning = false;
-      this.onResult = null;
-      this.onError = null;
-    }
+  class SettingsRenderer {
+    constructor(container) { this.container = container; this.pcSettings = null; }
 
-    async start() {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        var err = new Error("此浏览器不支持摄像头访问");
-        if (this.onError) this.onError(err);
-        throw err;
-      }
-      try {
-        this.stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
-        });
-        this.video.srcObject = this.stream;
-        await this.video.play();
-        this.scanning = true;
-        this._scanFrame();
-      } catch (err) {
-        var msg = "摄像头访问失败";
-        if (err.name === "NotAllowedError") msg = "请允许摄像头权限后重试";
-        if (err.name === "NotFoundError") msg = "未找到摄像头设备";
-        var error = new Error(msg);
-        if (this.onError) this.onError(error);
-        throw error;
-      }
-    }
-
-    stop() {
-      this.scanning = false;
-      if (this.stream) {
-        this.stream.getTracks().forEach(function(t) { t.stop(); });
-        this.stream = null;
-      }
-    }
-
-    _scanFrame() {
-      if (!this.scanning) return;
+    render(connection, onConnect, onDisconnect) {
       var self = this;
+      var html = '';
 
-      if (this.video.readyState === this.video.HAVE_ENOUGH_DATA) {
-        this.canvas.width = this.video.videoWidth;
-        this.canvas.height = this.video.videoHeight;
-        this.ctx.drawImage(this.video, 0, 0);
+      // Connection section
+      html += '<div class="settings-section">';
+      html += '<div class="settings-section-title">连接</div>';
 
-        var imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+      // Current status
+      html += '<div class="conn-status">';
+      var st = connection.state;
+      var stCfg = CONNECTION_STATES[st] || CONNECTION_STATES.disconnected;
+      html += '<span class="conn-status-dot ' + stCfg.dot + '"></span>';
+      html += '<span class="conn-status-text">' + stCfg.text + '</span>';
+      if (connection.config) html += '<span class="conn-status-addr">' + esc(connection.config.host) + ':' + connection.config.port + '</span>';
+      html += '</div>';
 
-        if (typeof jsQR !== "undefined") {
-          var code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
-          if (code && code.data) {
-            var parsed = this._parseClawdUrl(code.data);
-            if (parsed) {
-              this.stop();
-              if (this.onResult) this.onResult(parsed);
-              return;
+      // Inputs
+      html += '<div class="input-group"><label>地址</label><input id="input-host" type="text" placeholder="192.168.1.10" autocomplete="off" value="' + esc((connection.config && connection.config.host) || "") + '"></div>';
+      html += '<div class="input-group"><label>端口</label><input id="input-port" type="number" placeholder="23334" value="' + esc((connection.config && connection.config.port) || "23334") + '"></div>';
+      html += '<div class="input-group"><label>Token</label><input id="input-token" type="text" placeholder="32位token" autocomplete="off" value="' + esc((connection.config && connection.config.token) || "") + '"></div>';
+
+      html += '<div class="btn-group">';
+      html += '<button id="btn-connect" class="primary-btn">连接</button>';
+      html += '<button id="btn-disconnect" class="secondary-btn">断开</button>';
+      html += '</div>';
+
+      // History
+      var history = connection.getHistory();
+      if (history.length > 0) {
+        html += '<div class="history-list">';
+        for (var i = 0; i < history.length; i++) {
+          var h = history[i];
+          html += '<div class="history-item">';
+          html += '<span class="history-addr">' + esc(h.host) + ':' + h.port + '</span>';
+          html += '<span class="history-time">' + formatAgo(h.timestamp) + '</span>';
+          html += '<button class="history-connect" data-index="' + i + '">连接</button>';
+          html += '<button class="history-delete" data-index="' + i + '">&times;</button>';
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+
+      // PC端 Settings (read-only)
+      if (this.pcSettings) {
+        for (var si = 0; si < SETTINGS_SECTIONS.length; si++) {
+          var section = SETTINGS_SECTIONS[si];
+          html += '<div class="settings-section">';
+          html += '<div class="settings-section-title">' + esc(section.label) + '</div>';
+
+          if (section.key === "agents" && this.pcSettings.agents) {
+            var agents = this.pcSettings.agents;
+            for (var agentId in agents) {
+              if (!agents.hasOwnProperty(agentId)) continue;
+              var agent = agents[agentId];
+              html += '<div class="settings-row"><span class="settings-label">' + esc(agentId) + '</span>';
+              html += '<span class="settings-value">' + (agent.enabled ? '✓ 启用' : '✗ 禁用') + '</span></div>';
+            }
+          } else {
+            for (var fi = 0; fi < section.fields.length; fi++) {
+              var field = section.fields[fi];
+              if (field.key === "host" || field.key === "port" || field.key === "token") continue; // connection fields shown above
+              var val = this.pcSettings[field.key];
+              html += '<div class="settings-row"><span class="settings-label">' + esc(field.label) + '</span>';
+              html += '<span class="settings-value">' + esc(formatSettingsValue(val, field)) + '</span></div>';
             }
           }
+          html += '</div>';
         }
       }
 
-      requestAnimationFrame(function() { self._scanFrame(); });
+      this.container.innerHTML = html;
+      this._bindEvents(connection, onConnect, onDisconnect);
     }
 
-    _parseClawdUrl(data) {
-      var match = data.match(/^clawd:\/\/([^:]+):(\d+)\/([a-f0-9]{16,})$/);
-      if (match) return { host: match[1], port: parseInt(match[2], 10), token: match[3] };
+    _bindEvents(connection, onConnect, onDisconnect) {
+      var self = this;
+      var btnConnect = document.getElementById("btn-connect");
+      var btnDisconnect = document.getElementById("btn-disconnect");
+      if (btnConnect) btnConnect.addEventListener("click", function() {
+        var host = document.getElementById("input-host").value.trim();
+        var port = parseInt(document.getElementById("input-port").value, 10);
+        var token = document.getElementById("input-token").value.trim();
+        if (!host || !port || !token) { showToast("请填写完整连接信息", "error"); return; }
+        onConnect({ host: host, port: port, token: token });
+      });
+      if (btnDisconnect) btnDisconnect.addEventListener("click", function() { onDisconnect(); });
 
-      try {
-        var obj = JSON.parse(data);
-        if (obj.host && obj.port && obj.token) return { host: obj.host, port: parseInt(obj.port, 10), token: obj.token };
-      } catch {}
-
-      try {
-        var url = new URL(data);
-        if (url.protocol === "clawd:") return { host: url.hostname, port: parseInt(url.port, 10), token: url.pathname.slice(1) };
-      } catch {}
-
-      return null;
+      this.container.querySelectorAll(".history-connect").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+          var entry = connection.getHistory()[parseInt(this.getAttribute("data-index"), 10)];
+          if (entry) onConnect(entry);
+        });
+      });
+      this.container.querySelectorAll(".history-delete").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+          connection.deleteHistory(parseInt(this.getAttribute("data-index"), 10));
+          self.render(connection, onConnect, onDisconnect);
+        });
+      });
     }
+
+    fetchPcSettings() {
+      var self = this;
+      var host = window.location.hostname;
+      var port = window.location.port;
+      fetch("http://" + host + ":" + port + "/api/connection-info")
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data && data.settings) {
+            self.pcSettings = data.settings;
+            // Auto-fill connection fields if empty
+            var hostInput = document.getElementById("input-host");
+            var portInput = document.getElementById("input-port");
+            var tokenInput = document.getElementById("input-token");
+            if (hostInput && !hostInput.value && data.lanIp) hostInput.value = data.lanIp;
+            if (portInput && !portInput.value && data.port) portInput.value = data.port;
+            if (tokenInput && !tokenInput.value && data.token) tokenInput.value = data.token;
+          }
+        })
+        .catch(function() {});
+    }
+  }
+
+  function formatSettingsValue(val, field) {
+    if (val === undefined || val === null) return "—";
+    if (field && field.type === "boolean") return val ? "是" : "否";
+    if (field && field.type === "range") return String(Math.round(val * 100)) + "%";
+    if (typeof val === "object") return JSON.stringify(val);
+    return String(val);
   }
 
   // === App ===
@@ -649,118 +553,103 @@
     constructor() {
       this.connection = new ConnectionManager();
       this.renderer = new SessionRenderer(document.getElementById("session-list"));
-      this.scanner = new QrScanner(
-        document.getElementById("qr-video"),
-        document.getElementById("qr-canvas")
-      );
+      this.settingsRenderer = new SettingsRenderer(document.getElementById("settings-content"));
       this.approval = new ApprovalManager();
       this.notifier = new NotificationManager();
-      this._outputs = {};
+      this.activeTab = "sessions";
 
       window._clawdApp = this;
 
-      this._bindEvents();
+      this._bindNav();
       this._bindConnection();
       this._bindApproval();
-      this._initThemeColor();
+      this._bindLog();
       this.renderer.startStaleCleanup();
 
-      if ("serviceWorker" in navigator) {
-        navigator.serviceWorker.register("/mobile/sw.js").catch(function() {});
+      if ("serviceWorker" in navigator) navigator.serviceWorker.register("/mobile/sw.js").catch(function() {});
+
+      // Auto-connect
+      this._autoConnect();
+    }
+
+    _autoConnect() {
+      // 1. URL params
+      var params = new URLSearchParams(window.location.search);
+      var urlHost = params.get("host");
+      var urlPort = params.get("port");
+      var urlToken = params.get("token");
+      if (urlHost && urlPort && urlToken) {
+        this.connection.connect({ host: urlHost, port: parseInt(urlPort, 10), token: urlToken });
+        return;
+      }
+
+      // 2. Last successful connection from history
+      var history = this.connection.getHistory();
+      if (history.length > 0) {
+        this.connection.connect(history[0]);
+        return;
+      }
+
+      // 3. Try same host as PWA is served from (bridge server)
+      var bridgeHost = window.location.hostname;
+      var bridgePort = window.location.port;
+      if (bridgeHost && bridgePort) {
+        // Fetch token from bridge API
+        var self = this;
+        fetch("http://" + bridgeHost + ":" + bridgePort + "/api/connection-info")
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data && data.token) {
+              self.connection.connect({ host: bridgeHost, port: parseInt(bridgePort, 10), token: data.token });
+            }
+          })
+          .catch(function() {});
       }
     }
 
-    _initThemeColor() {
-      var meta = document.querySelector('meta[name="theme-color"]');
-      if (!meta) return;
-      var darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      function update() {
-        meta.setAttribute("content", darkQuery.matches ? "#111318" : "#f5f5f7");
-      }
-      update();
-      darkQuery.addEventListener("change", update);
-    }
-
-    _bindEvents() {
+    _bindNav() {
       var self = this;
-
-      // QR scan buttons
-      document.getElementById("btn-cancel-scan").addEventListener("click", function() { self._closeScanner(); });
-      document.getElementById("btn-scan-empty")?.addEventListener("click", function() { self._openScanner(); });
-
-      // Settings
-      document.getElementById("btn-close-settings").addEventListener("click", function() { self._closeSettings(); });
-      document.getElementById("btn-connect").addEventListener("click", function() { self._manualConnect(); });
-      document.getElementById("btn-disconnect").addEventListener("click", function() { self.connection.disconnect(); });
-
-      // Devices
-      document.getElementById("btn-close-devices").addEventListener("click", function() {
-        document.getElementById("devices-panel").classList.add("hidden");
-      });
-
-      // Bottom nav tabs
       document.querySelectorAll(".nav-tab").forEach(function(tab) {
         tab.addEventListener("click", function() {
-          var tabIndex = parseInt(this.getAttribute("data-tab"), 10);
-          self._onNavTab(tabIndex);
+          var tabId = this.getAttribute("data-tab");
+          self._switchTab(tabId);
         });
       });
-
-      // Log toggle
-      document.getElementById("btn-toggle-log").addEventListener("click", function() {
-        document.getElementById("log-panel").classList.toggle("collapsed");
-      });
-
-      // Copy buttons
-      document.querySelectorAll(".copy-btn").forEach(function(btn) {
-        btn.addEventListener("click", function() {
-          var field = btn.getAttribute("data-copy");
-          var text = document.getElementById("info-" + field).textContent;
-          navigator.clipboard.writeText(text).then(function() {
-            btn.textContent = "已复制";
-            setTimeout(function() { btn.textContent = "复制"; }, 1500);
-          });
-        });
-      });
-
-      this.scanner.onResult = function(info) {
-        self._closeScanner();
-        self.connection.connect(info);
-      };
-      this.scanner.onError = function(err) {
-        showToast(err.message, "error");
-        self._closeScanner();
-      };
     }
 
-    _onNavTab(index) {
-      // Update active state
-      document.querySelectorAll(".nav-tab").forEach(function(t, i) {
-        t.classList.toggle("active", i === index);
+    _switchTab(tabId) {
+      this.activeTab = tabId;
+      document.querySelectorAll(".nav-tab").forEach(function(t) {
+        t.classList.toggle("active", t.getAttribute("data-tab") === tabId);
       });
-
-      if (index === 0) {
-        // Sessions - already visible
-      } else if (index === 1) {
-        document.getElementById("devices-panel").classList.remove("hidden");
-      } else if (index === 2) {
-        this._openSettings();
+      document.getElementById("page-sessions").classList.toggle("hidden", tabId !== "sessions");
+      document.getElementById("page-settings").classList.toggle("hidden", tabId !== "settings");
+      if (tabId === "settings") {
+        this._renderSettings();
+        this.settingsRenderer.fetchPcSettings();
       }
+    }
+
+    _renderSettings() {
+      var self = this;
+      this.settingsRenderer.render(
+        this.connection,
+        function(config) { self.connection.connect(config); },
+        function() { self.connection.disconnect(); }
+      );
     }
 
     _bindConnection() {
       var self = this;
-
       this.connection.onStateChange = function(state) {
         self._updateConnectionStatus(state);
         if (state === "connected") self.notifier.requestPermission();
+        if (self.activeTab === "settings") self._renderSettings();
       };
-
       this.connection.onDisconnected = function() {
         self.approval.pending.clear();
         self.approval._render();
       };
-
       this.connection.onMessage = function(msg) {
         if (msg.type === "snapshot") {
           self.renderer.updateFromSnapshot(msg.sessions || {});
@@ -770,14 +659,10 @@
           self.notifier.onStateChange(msg.sessionId, msg.data);
         } else if (msg.type === "session_deleted") {
           self.renderer.removeSession(msg.sessionId);
-          log("Session deleted: " + msg.sessionId);
         } else if (msg.type === "tool_output") {
           var sid = msg.sessionId;
           var session = self.renderer.sessions.get(sid);
-          if (session) {
-            session.lastOutput = { toolName: msg.data.toolName, output: (msg.data.output || "").substring(0, 200), at: msg.timestamp || Date.now() };
-            self.renderer.render();
-          }
+          if (session) { session.lastOutput = { toolName: msg.data.toolName, output: (msg.data.output || "").substring(0, 200), at: msg.timestamp || Date.now() }; self.renderer.render(); }
         } else if (msg.type === "permission_request") {
           self.approval.showRequest({ type: "permission_request", requestId: msg.requestId, data: msg.data || msg });
           self.notifier.onApprovalNeeded(msg.data || msg);
@@ -794,125 +679,24 @@
       var config = CONNECTION_STATES[state] || CONNECTION_STATES.disconnected;
       var dot = document.getElementById("connection-dot");
       var text = document.getElementById("connection-text");
-
       dot.className = "connection-dot " + config.dot;
-
-      if (state === "connected") {
-        text.textContent = config.text;
-        text.className = "connection-text connected";
-      } else if (state === "disconnected") {
-        text.textContent = "";
-        text.className = "connection-text";
-      } else {
-        text.textContent = config.text;
-        text.className = "connection-text";
-      }
+      text.textContent = state === "disconnected" ? "" : config.text;
+      text.className = "connection-text" + (state === "connected" ? " connected" : "");
     }
 
     _bindApproval() {
       var self = this;
-      this.approval.onSend = function(response) {
-        self.connection.send(response);
-        log("Sent: " + response.type);
-      };
+      this.approval.onSend = function(response) { self.connection.send(response); log("Sent: " + response.type); };
     }
 
-    _openScanner() {
-      var overlay = document.getElementById("qr-overlay");
-      overlay.classList.remove("hidden");
-      this.scanner.start().catch(function(err) {
-        showToast(err.message, "error");
-        overlay.classList.add("hidden");
-      });
-    }
-
-    _closeScanner() {
-      this.scanner.stop();
-      document.getElementById("qr-overlay").classList.add("hidden");
-    }
-
-    _openSettings() {
-      var panel = document.getElementById("settings-panel");
-      panel.classList.remove("hidden");
-      this._renderHistory();
-
-      if (this.connection.config) {
-        document.getElementById("input-host").value = this.connection.config.host || "";
-        document.getElementById("input-port").value = this.connection.config.port || "";
-        document.getElementById("input-token").value = this.connection.config.token || "";
-      }
-
-      var info = document.getElementById("current-info");
-      if (this.connection.config) {
-        info.style.display = "block";
-        document.getElementById("info-host").textContent = this.connection.config.host || "—";
-        document.getElementById("info-port").textContent = this.connection.config.port || "—";
-        document.getElementById("info-token").textContent = this.connection.config.token || "—";
-      } else {
-        info.style.display = "none";
-      }
-    }
-
-    _closeSettings() {
-      document.getElementById("settings-panel").classList.add("hidden");
-    }
-
-    _manualConnect() {
-      var host = document.getElementById("input-host").value.trim();
-      var port = parseInt(document.getElementById("input-port").value, 10);
-      var token = document.getElementById("input-token").value.trim();
-
-      if (!host || !port || !token) {
-        showToast("请填写完整连接信息", "error");
-        return;
-      }
-
-      this.connection.connect({ host: host, port: port, token: token });
-      this._closeSettings();
-    }
-
-    _renderHistory() {
-      var history = this.connection.getHistory();
-      var container = document.getElementById("connection-history");
-      if (history.length === 0) { container.innerHTML = ""; return; }
-
-      var self = this;
-      var html = '<h4 style="margin:16px 0 8px;font-size:14px;color:var(--muted)">连接历史</h4>';
-      history.forEach(function(h, i) {
-        var ago = formatAgo(h.timestamp);
-        html += '<div class="history-item">';
-        html += '<span class="history-addr">' + esc(h.host) + ':' + h.port + '</span>';
-        html += '<span class="history-time">' + ago + '</span>';
-        html += '<button class="history-connect" data-index="' + i + '">连接</button>';
-        html += '<button class="history-delete" data-index="' + i + '">&times;</button>';
-        html += '</div>';
-      });
-      container.innerHTML = html;
-
-      container.querySelectorAll(".history-connect").forEach(function(btn) {
-        btn.addEventListener("click", function() {
-          var idx = parseInt(this.getAttribute("data-index"), 10);
-          var entry = self.connection.getHistory()[idx];
-          if (entry) { self.connection.connect(entry); self._closeSettings(); }
-        });
-      });
-
-      container.querySelectorAll(".history-delete").forEach(function(btn) {
-        btn.addEventListener("click", function() {
-          var idx = parseInt(this.getAttribute("data-index"), 10);
-          self.connection.deleteHistory(idx);
-          self._renderHistory();
-        });
+    _bindLog() {
+      document.getElementById("btn-toggle-log").addEventListener("click", function() {
+        document.getElementById("log-panel").classList.toggle("collapsed");
       });
     }
   }
 
   // === Init ===
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", function() { new App(); });
-  } else {
-    new App();
-  }
-
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", function() { new App(); });
+  else new App();
 })();

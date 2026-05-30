@@ -1376,6 +1376,7 @@ const _lanWss = initLanWsServer({
   sessions,
   getPendingPermissions: () => pendingPermissions,
   resolvePermissionEntry,
+  getSettingsSnapshot: () => _settingsController.getSnapshot(),
 });
 const _origOnPermissionsChanged = _permCtx.onPermissionsChanged;
 _permCtx.onPermissionsChanged = () => {
@@ -2447,6 +2448,7 @@ registerSettingsIpc({
     : { status: "error", code: "quick_commands_unavailable", message: "Quick Commands are unavailable" },
   checkForUpdates,
   aboutHeroSvgPath: path.join(__dirname, "..", "assets", "svg", "clawd-about-hero.svg"),
+  getLanWsServer: () => _lanWss,
 });
 
 registerSessionIpc({

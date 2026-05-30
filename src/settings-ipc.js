@@ -438,6 +438,36 @@ function registerSettingsIpc(options = {}) {
     }
   });
 
+  handle("settings:mobile-connection-info", async () => {
+    try {
+      const lanWsServer = options.getLanWsServer ? options.getLanWsServer() : null;
+      if (!lanWsServer) return { status: "error", message: "LAN bridge not available" };
+      const port = lanWsServer.getPort();
+      const tok = lanWsServer.getToken();
+      const os = require("os");
+      let lanIp = "127.0.0.1";
+      const interfaces = os.networkInterfaces();
+      for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name]) {
+          if (iface.family === "IPv4" && !iface.internal) { lanIp = iface.address; break; }
+        }
+        if (lanIp !== "127.0.0.1") break;
+      }
+      const pairUrl = `clawd://${lanIp}:${port}/${tok}`;
+      let qrDataUrl = null;
+      try {
+        const QRCode = require("qrcode");
+        qrDataUrl = await QRCode.toDataURL(pairUrl, {
+          width: 300, margin: 2,
+          color: { dark: "#000000", light: "#ffffff" },
+        });
+      } catch {}
+      return { status: "ok", port, token: tok, lanIp, pairUrl, qrDataUrl };
+    } catch (err) {
+      return { status: "error", message: (err && err.message) || String(err) };
+    }
+  });
+
   return {
     dispose() {
       while (disposers.length) {

@@ -12,113 +12,47 @@
 </head>
 <body>
   <!-- Top Bar -->
-  <div id="top-bar">
+  <header id="top-bar">
     <span class="brand-prefix">CLAWD</span><span class="brand-suffix"> Mobile</span>
     <span class="top-bar-spacer"></span>
     <span class="connection-dot" id="connection-dot"></span>
     <span class="connection-text" id="connection-text"></span>
-  </div>
+  </header>
 
-  <!-- Session List -->
-  <main id="session-list">
-    <div class="empty-state" id="empty-state">
-      <div class="empty-icon"></div>
-      <div class="empty-text">扫码配对开始监控</div>
-      <button id="btn-scan-empty" class="primary-btn">扫码配对</button>
-    </div>
+  <!-- Page: Sessions -->
+  <main id="page-sessions" class="page">
+    <div id="session-list"></div>
   </main>
 
+  <!-- Page: Settings -->
+  <section id="page-settings" class="page hidden">
+    <div id="settings-content"></div>
+  </section>
+
   <!-- Bottom Navigation -->
-  <div id="bottom-nav">
-    <div class="nav-tab active" data-tab="0">
+  <nav id="bottom-nav">
+    <div class="nav-tab active" data-tab="sessions">
       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
       <span>会话</span>
     </div>
-    <div class="nav-tab" data-tab="1">
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-      <span>设备</span>
-    </div>
-    <div class="nav-tab" data-tab="2">
+    <div class="nav-tab" data-tab="settings">
       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       <span>设置</span>
     </div>
-  </div>
-
-  <!-- QR Scanner Overlay -->
-  <div id="qr-overlay" class="overlay hidden">
-    <video id="qr-video" autoplay playsinline></video>
-    <canvas id="qr-canvas" class="hidden"></canvas>
-    <div class="qr-frame"></div>
-    <button id="btn-cancel-scan" class="cancel-btn">取消</button>
-    <div class="scan-hint">将 QR 码放入框内</div>
-  </div>
-
-  <!-- Settings Panel -->
-  <div id="settings-panel" class="overlay hidden">
-    <div class="settings-content">
-      <div class="settings-header">
-        <h3>连接设置</h3>
-        <button id="btn-close-settings" class="close-btn">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-      <div id="current-info" class="current-info" style="display:none">
-        <div class="info-row"><span class="info-label">IP</span><span id="info-host" class="info-value"></span><button class="copy-btn" data-copy="host">复制</button></div>
-        <div class="info-row"><span class="info-label">端口</span><span id="info-port" class="info-value"></span><button class="copy-btn" data-copy="port">复制</button></div>
-        <div class="info-row"><span class="info-label">Token</span><span id="info-token" class="info-value"></span><button class="copy-btn" data-copy="token">复制</button></div>
-      </div>
-      <div class="input-group">
-        <label for="input-host">地址</label>
-        <input id="input-host" type="text" placeholder="192.168.1.10" autocomplete="off">
-      </div>
-      <div class="input-group">
-        <label for="input-port">端口</label>
-        <input id="input-port" type="number" placeholder="23333" value="23333">
-      </div>
-      <div class="input-group">
-        <label for="input-token">Token</label>
-        <input id="input-token" type="text" placeholder="32位token" autocomplete="off">
-      </div>
-      <div class="btn-group">
-        <button id="btn-connect" class="primary-btn">连接</button>
-        <button id="btn-disconnect" class="secondary-btn">断开</button>
-      </div>
-      <div id="connection-history"></div>
-    </div>
-  </div>
-
-  <!-- Devices Placeholder -->
-  <div id="devices-panel" class="overlay hidden">
-    <div class="settings-content">
-      <div class="settings-header">
-        <h3>设备</h3>
-        <button id="btn-close-devices" class="close-btn">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-      <div class="empty-state" style="padding:40px 0">
-        <div class="empty-icon"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
-        <div class="empty-text">即将推出</div>
-      </div>
-    </div>
-  </div>
+  </nav>
 
   <!-- Approval Overlay -->
   <div id="approval-overlay" class="approval-overlay hidden"></div>
 
-  <!-- Log Panel -->
+  <!-- Log Panel (collapsed by default) -->
   <div id="log-panel" class="collapsed">
-    <button id="btn-toggle-log" class="log-toggle">
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
-      日志
-    </button>
+    <button id="btn-toggle-log" class="log-toggle">日志</button>
     <div id="log-content"></div>
   </div>
 
   <!-- Toast -->
   <div id="toast-container"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
   <script src="/mobile/icons.js"></script>
   <script src="/mobile/app.js"></script>
 </body>

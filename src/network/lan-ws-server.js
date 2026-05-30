@@ -69,9 +69,31 @@ function initLanWsServer(ctx) {
 
   // ── HTTP server (serves PWA + WebSocket upgrade) ──
 
+  function getLocalIP() {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+      for (const iface of interfaces[name]) {
+        if (iface.family === "IPv4" && !iface.internal) return iface.address;
+      }
+    }
+    return "127.0.0.1";
+  }
+
   function serveStatic(req, res) {
     let urlPath;
     try { urlPath = new URL(req.url, "http://localhost").pathname; } catch { res.writeHead(400); res.end(); return; }
+
+    // API endpoint for connection info
+    if (urlPath === "/api/connection-info") {
+      const info = { port: activePort, token: token, lanIp: getLocalIP() };
+      if (typeof ctx.getSettingsSnapshot === "function") {
+        try { info.settings = ctx.getSettingsSnapshot(); } catch {}
+      }
+      res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-cache" });
+      res.end(JSON.stringify(info));
+      return;
+    }
+
     if (urlPath === "/mobile/" || urlPath === "/mobile") urlPath = "/mobile/index.html";
     if (!urlPath.startsWith("/mobile/")) { res.writeHead(404); res.end(); return; }
     const rel = urlPath.slice("/mobile/".length);
