@@ -89,6 +89,7 @@ class ClawdWebSocket(private val prefsStore: PrefsStore) {
 
         eventSource = sseFactory.newEventSource(request, object : EventSourceListener() {
             override fun onOpen(eventSource: EventSource, response: Response) {
+                reconnectJob?.cancel()
                 reconnectDelay = 1000L
                 _connectionState.value = ConnectionState.CONNECTED
                 resetWatchdog()
@@ -271,6 +272,7 @@ class ClawdWebSocket(private val prefsStore: PrefsStore) {
     }
 
     private fun scheduleReconnect() {
+        if (reconnectJob?.isActive == true) return
         _connectionState.value = ConnectionState.RECONNECTING
         _sessions.value = emptyMap()
         reconnectJob = scope.launch {
