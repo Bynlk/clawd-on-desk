@@ -75,19 +75,6 @@ object NotificationHelper {
         manager.notify(id, notification)
     }
 
-    fun showStatusNotification(context: Context, title: String, body: String, priority: Int = NotificationCompat.PRIORITY_DEFAULT) {
-        val notification = NotificationCompat.Builder(context, CHANNEL_STATUS)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setPriority(priority)
-            .setAutoCancel(true)
-            .build()
-
-        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(notificationId++, notification)
-    }
-
     fun cancelNotification(context: Context, id: Int) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.cancel(id)

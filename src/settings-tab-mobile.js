@@ -96,17 +96,6 @@
     listRow.appendChild(deviceList);
     rows.push(listRow);
 
-    // 连接历史
-    var historyRow = document.createElement("div");
-    historyRow.className = "row";
-    historyRow.style.flexDirection = "column";
-    historyRow.style.padding = "0";
-    var historyList = document.createElement("div");
-    historyList.id = "mobile-history-list";
-    historyList.style.cssText = "width:100%;max-height:200px;overflow-y:auto;";
-    historyRow.appendChild(historyList);
-    rows.push(historyRow);
-
     return helpers.buildSection(t("mobileStatusSection"), rows);
   }
 
@@ -175,10 +164,6 @@
       renderDeviceList(listEl, status.clients);
     }
 
-    var historyEl = document.getElementById("mobile-history-list");
-    if (historyEl && status.connectionHistory && status.connectionHistory.length > 0) {
-      renderHistoryList(historyEl, status.connectionHistory);
-    }
   }
 
   function renderDeviceList(listEl, clients) {
@@ -190,30 +175,6 @@
       return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 16px;border-bottom:1px solid var(--row-border);font-size:12px;">' +
         '<span>' + helpers.escapeHtml(c.ip || "--") + '</span>' +
         '<span style="color:var(--text-tertiary)">' + formatTime(c.connectedAt) + '</span>' +
-        '<button class="soft-btn" onclick="window.settingsAPI.mobileDisconnectClient(\'' + helpers.escapeHtml(c.id) + '\')">' + helpers.escapeHtml(t("mobileDisconnect")) + '</button>' +
-        '</div>';
-    }).join("");
-  }
-
-  function renderHistoryList(historyEl, history) {
-    // Show last 10 unique devices
-    var seen = {};
-    var unique = [];
-    for (var i = history.length - 1; i >= 0 && unique.length < 10; i--) {
-      var h = history[i];
-      var key = h.ip;
-      if (!seen[key]) {
-        seen[key] = true;
-        unique.push(h);
-      }
-    }
-    if (unique.length === 0) return;
-
-    var header = '<div style="padding:8px 16px;font-size:11px;color:var(--text-tertiary);border-bottom:1px solid var(--row-border);">Recent devices</div>';
-    historyEl.innerHTML = header + unique.map(function(h) {
-      return '<div style="display:flex;justify-content:space-between;padding:6px 16px;font-size:11px;color:var(--text-tertiary);">' +
-        '<span>' + helpers.escapeHtml(h.ip || "--") + '</span>' +
-        '<span>' + formatTime(h.connectedAt) + '</span>' +
         '</div>';
     }).join("");
   }

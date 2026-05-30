@@ -5,7 +5,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import androidx.core.app.NotificationCompat
-import com.clawd.mobile.ClawdApp
+
 import com.clawd.mobile.data.SessionData
 
 class StatusNotifier(private val context: Context) {

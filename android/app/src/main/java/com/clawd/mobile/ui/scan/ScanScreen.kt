@@ -2,7 +2,7 @@ package com.clawd.mobile.ui.scan
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.graphics.ImageFormat
+
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.*
@@ -28,7 +28,7 @@ import com.clawd.mobile.data.ConnectionConfig
 import com.google.zxing.*
 import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.qrcode.QRCodeReader
-import java.nio.ByteBuffer
+
 import java.util.concurrent.Executors
 
 @OptIn(ExperimentalMaterial3Api::class)

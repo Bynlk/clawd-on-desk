@@ -49,7 +49,10 @@ class MainActivity : ComponentActivity() {
 
         // Build permission queue
         val permissions = buildList {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
                 add(PermissionRequest(
                     Manifest.permission.POST_NOTIFICATIONS,
                     "通知权限",

@@ -107,39 +107,25 @@ fun SessionsScreen(
                         onManual = { navController.navigate("settings") }
                     )
                 } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 0.dp),
-                        verticalArrangement = Arrangement.spacedBy(0.dp)
-                    ) {
-                        // Section label
-                        item {
-                            SectionLabel(title = "活跃会话", count = sessions.size)
-                        }
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        // Fixed section label
+                        SectionLabel(title = "活跃会话", count = sessions.size)
 
-                        // Session cards
-                        items(sessions, key = { it.id }) { session ->
-                            SessionCard(
-                                session = session,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
-                            )
+                        // Scrollable session cards
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = 90.dp),
+                            verticalArrangement = Arrangement.spacedBy(0.dp)
+                        ) {
+                            items(sessions, key = { it.id }) { session ->
+                                SessionCard(
+                                    session = session,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
+                                )
+                            }
                         }
                     }
                 }
-
-                // Fade gradient at bottom — cards visually cut off behind bottom bar
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 76.dp)
-                        .background(
-                            brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, ClawdBgDark)
-                            )
-                        )
-                )
 
                 // Bottom navigation
                 BottomNav(
