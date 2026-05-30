@@ -2,6 +2,7 @@ package com.clawd.mobile.ui.scan
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.ImageFormat
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.*
@@ -24,8 +25,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.clawd.mobile.data.ConnectionConfig
-import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.common.InputImage
+import com.google.zxing.*
+import com.google.zxing.common.HybridBinarizer
+import com.google.zxing.qrcode.QRCodeReader
+import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -121,6 +124,7 @@ private fun CameraPreview(onScanned: (ConnectionConfig) -> Unit) {
 
                 val imageAnalysis = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
                     .build()
                     .also { analysis ->
                         analysis.setAnalyzer(cameraExecutor) { imageProxy ->
@@ -154,29 +158,31 @@ private fun CameraPreview(onScanned: (ConnectionConfig) -> Unit) {
     )
 }
 
-@androidx.annotation.OptIn(ExperimentalGetImage::class)
 private fun processImage(imageProxy: ImageProxy, onResult: (ConnectionConfig?) -> Unit) {
-    val mediaImage = imageProxy.image ?: run {
-        imageProxy.close()
-        onResult(null)
-        return
-    }
-    val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-    val scanner = BarcodeScanning.getClient()
+    try {
+        val buffer = imageProxy.planes[0].buffer
+        val bytes = ByteArray(buffer.remaining())
+        buffer.get(bytes)
 
-    scanner.process(image)
-        .addOnSuccessListener { barcodes ->
-            for (barcode in barcodes) {
-                val raw = barcode.rawValue ?: continue
-                val config = ConnectionConfig.fromClawdUrl(raw)
-                if (config != null) {
-                    onResult(config)
-                    imageProxy.close()
-                    return@addOnSuccessListener
-                }
-            }
-            onResult(null)
-        }
-        .addOnFailureListener { onResult(null) }
-        .addOnCompleteListener { imageProxy.close() }
+        val source = PlanarYUVLuminanceSource(
+            bytes,
+            imageProxy.width,
+            imageProxy.height,
+            0, 0,
+            imageProxy.width,
+            imageProxy.height,
+            false
+        )
+        val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
+        val reader = QRCodeReader()
+        val result = reader.decode(binaryBitmap)
+        val raw = result.text
+
+        val config = ConnectionConfig.fromClawdUrl(raw)
+        onResult(config)
+    } catch (_: Exception) {
+        onResult(null)
+    } finally {
+        imageProxy.close()
+    }
 }

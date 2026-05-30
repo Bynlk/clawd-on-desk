@@ -11,3 +11,7 @@
 -keep,includedescriptorclasses class com.clawd.mobile.**$$serializer { *; }
 -keepclassmembers class com.clawd.mobile.** { *** Companion; }
 -keepclasseswithmembers class com.clawd.mobile.** { kotlinx.serialization.KSerializer serializer(...); }
+
+# zxing
+-keep class com.google.zxing.** { *; }
+-dontwarn com.google.zxing.**
