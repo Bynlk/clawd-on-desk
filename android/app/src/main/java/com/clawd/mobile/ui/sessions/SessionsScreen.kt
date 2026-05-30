@@ -63,7 +63,7 @@ fun SessionsScreen(
     val sessions = remember(sessionsMap) {
         sessionsMap.map { (id, data) -> Session(id, data) }
             .sortedWith(compareBy<Session> { it.stateConfig.priority }
-                .thenByDescending { it.data.updatedAt ?: 0 })
+                .thenByDescending { it.data.updatedAt ?: 0L })
     }
 
     val isConnected = connectionState == ConnectionState.CONNECTED
