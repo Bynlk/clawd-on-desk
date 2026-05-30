@@ -1370,6 +1370,24 @@ const _serverCtx = {
 const _server = require("./server")(_serverCtx);
 const { startHttpServer, getHookServerPort } = _server;
 
+// ── LAN WebSocket bridge for PWA mobile clients ──
+const { initLanWsServer } = require("./network/lan-ws-server");
+const _lanWss = initLanWsServer({
+  sessions,
+  getPendingPermissions: () => pendingPermissions,
+  resolvePermissionEntry,
+});
+const _origOnPermissionsChanged = _permCtx.onPermissionsChanged;
+_permCtx.onPermissionsChanged = () => {
+  _origOnPermissionsChanged();
+  _lanWss.onPermissionBroadcast();
+};
+const _origOnPermissionResolved = _permCtx.onPermissionResolved;
+_permCtx.onPermissionResolved = (permEntry, options) => {
+  _origOnPermissionResolved(permEntry, options);
+  _lanWss.onPermissionResolved(permEntry);
+};
+
 function updateLog(msg) {
   if (!updateDebugLog) return;
   const { rotatedAppend } = require("./log-rotate");
@@ -2582,6 +2600,7 @@ function createWindow() {
   initFocusHelper();
   startMainTick();
   startHttpServer();
+  _lanWss.start();
   startStaleCleanup();
   // Wait for renderer to be ready before sending initial state
   // If hooks arrived during startup, respect them instead of forcing idle
@@ -2855,6 +2874,7 @@ if (!gotTheLock) {
     if (hardwareBuddyAdapter) hardwareBuddyAdapter.stop();
     _perm.cleanup();
     _server.cleanup();
+    _lanWss.cleanup();
     _updateBubble.cleanup();
     _state.cleanup();
     _tick.cleanup();

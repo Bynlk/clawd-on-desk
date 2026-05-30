@@ -52,6 +52,8 @@ docs/**
 !docs/releases/release-v0.7.1.md
 !docs/releases/release-v0.8.0.md
 !docs/releases/release-v0.8.1.md
+!docs/mobile-protocol-v1.md
+!docs/pr-mobile-bridge.md
 
 # Temp files from testing
 .tmp_*
