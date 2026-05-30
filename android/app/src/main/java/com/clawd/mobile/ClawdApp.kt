@@ -11,6 +11,7 @@ class ClawdApp : Application() {
         const val CHANNEL_APPROVAL = "clawd_approval"
         const val CHANNEL_STATUS = "clawd_status"
         const val CHANNEL_ALERT = "clawd_alert"
+        const val CHANNEL_SERVICE = "clawd_service"
     }
 
     override fun onCreate() {
@@ -52,6 +53,16 @@ class ClawdApp : Application() {
             manager.createNotificationChannel(approvalChannel)
             manager.createNotificationChannel(statusChannel)
             manager.createNotificationChannel(alertChannel)
+
+            val serviceChannel = NotificationChannel(
+                CHANNEL_SERVICE,
+                getString(R.string.channel_service),
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = getString(R.string.channel_service_desc)
+                setShowBadge(false)
+            }
+            manager.createNotificationChannel(serviceChannel)
         }
     }
 }

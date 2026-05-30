@@ -13,6 +13,11 @@ class PrefsStore(context: Context) {
         private const val KEY_CONFIG = "connection_config"
         private const val KEY_HISTORY = "connection_history"
         private const val KEY_MAX_HISTORY = 5
+        private const val KEY_NOTIFY_APPROVAL = "notify_approval"
+        private const val KEY_NOTIFY_STATUS = "notify_status"
+        private const val KEY_NOTIFY_ALERT = "notify_alert"
+        private const val KEY_NOTIFY_ENABLED = "notify_enabled"
+        private const val KEY_BG_KEEPALIVE = "bg_keepalive"
     }
 
     fun saveConfig(config: ConnectionConfig) {
@@ -49,4 +54,20 @@ class PrefsStore(context: Context) {
             prefs.edit().putString(KEY_HISTORY, json.encodeToString(history)).apply()
         }
     }
+
+    // Notification settings
+    fun isNotifyEnabled(): Boolean = prefs.getBoolean(KEY_NOTIFY_ENABLED, true)
+    fun setNotifyEnabled(v: Boolean) { prefs.edit().putBoolean(KEY_NOTIFY_ENABLED, v).apply() }
+
+    fun isNotifyApproval(): Boolean = prefs.getBoolean(KEY_NOTIFY_APPROVAL, true)
+    fun setNotifyApproval(v: Boolean) { prefs.edit().putBoolean(KEY_NOTIFY_APPROVAL, v).apply() }
+
+    fun isNotifyStatus(): Boolean = prefs.getBoolean(KEY_NOTIFY_STATUS, true)
+    fun setNotifyStatus(v: Boolean) { prefs.edit().putBoolean(KEY_NOTIFY_STATUS, v).apply() }
+
+    fun isNotifyAlert(): Boolean = prefs.getBoolean(KEY_NOTIFY_ALERT, true)
+    fun setNotifyAlert(v: Boolean) { prefs.edit().putBoolean(KEY_NOTIFY_ALERT, v).apply() }
+
+    fun isBgKeepalive(): Boolean = prefs.getBoolean(KEY_BG_KEEPALIVE, true)
+    fun setBgKeepalive(v: Boolean) { prefs.edit().putBoolean(KEY_BG_KEEPALIVE, v).apply() }
 }

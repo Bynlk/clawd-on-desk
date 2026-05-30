@@ -8,10 +8,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.clawd.mobile.data.PrefsStore
 import com.clawd.mobile.notification.StatusNotifier
+import com.clawd.mobile.service.WebSocketService
 import com.clawd.mobile.ui.approval.ApprovalViewModel
 import com.clawd.mobile.ui.sessions.SessionsScreen
 import com.clawd.mobile.ui.scan.ScanScreen
 import com.clawd.mobile.ui.manual.ManualScreen
+import com.clawd.mobile.ui.settings.SettingsScreen
 import com.clawd.mobile.ws.ClawdWebSocket
 
 @Composable
@@ -19,35 +21,56 @@ fun ClawdNavGraph() {
     val navController = rememberNavController()
     val context = LocalContext.current
     val prefsStore = remember { PrefsStore(context) }
-    val webSocket = remember { ClawdWebSocket(prefsStore) }
     val statusNotifier = remember { StatusNotifier(context) }
+
+    // Start foreground service
+    LaunchedEffect(Unit) {
+        WebSocketService.start(context)
+    }
+
+    // Wait for service to provide WebSocket, fallback to local instance
+    var webSocket by remember { mutableStateOf<ClawdWebSocket?>(null) }
+
+    LaunchedEffect(Unit) {
+        // Poll for service WebSocket
+        repeat(50) { // 5 seconds max
+            WebSocketService.getWebSocket()?.let {
+                webSocket = it
+                return@LaunchedEffect
+            }
+            kotlinx.coroutines.delay(100)
+        }
+        // Fallback if service didn't start
+        if (webSocket == null) {
+            webSocket = ClawdWebSocket(prefsStore)
+        }
+    }
+
+    val ws = webSocket ?: return
+
     val approvalViewModel: ApprovalViewModel = viewModel(
-        factory = ApprovalViewModel.Factory(context.applicationContext as android.app.Application, webSocket)
+        factory = ApprovalViewModel.Factory(context.applicationContext as android.app.Application, ws)
     )
 
     // Try auto-reconnect to last connection
-    LaunchedEffect(Unit) {
-        webSocket.reconnect()
+    LaunchedEffect(ws) {
+        ws.reconnect()
     }
 
     // Monitor session changes for notifications
-    LaunchedEffect(webSocket) {
-        webSocket.sessions.collect { sessionsMap ->
+    LaunchedEffect(ws) {
+        ws.sessions.collect { sessionsMap ->
             sessionsMap.forEach { (id, data) ->
                 statusNotifier.onSessionUpdate(id, data)
             }
         }
     }
 
-    DisposableEffect(Unit) {
-        onDispose { webSocket.destroy() }
-    }
-
     NavHost(navController = navController, startDestination = "sessions") {
         composable("sessions") {
             SessionsScreen(
                 navController = navController,
-                webSocket = webSocket,
+                webSocket = ws,
                 approvalViewModel = approvalViewModel
             )
         }
@@ -55,7 +78,7 @@ fun ClawdNavGraph() {
             ScanScreen(
                 onBack = { navController.popBackStack() },
                 onScanned = { config ->
-                    webSocket.connect(config)
+                    WebSocketService.start(context, config)
                     navController.navigate("sessions") {
                         popUpTo("sessions") { inclusive = true }
                     }
@@ -67,11 +90,18 @@ fun ClawdNavGraph() {
                 prefsStore = prefsStore,
                 onBack = { navController.popBackStack() },
                 onConnect = { config ->
-                    webSocket.connect(config)
+                    WebSocketService.start(context, config)
                     navController.navigate("sessions") {
                         popUpTo("sessions") { inclusive = true }
                     }
                 }
+            )
+        }
+        composable("settings") {
+            SettingsScreen(
+                navController = navController,
+                webSocket = ws,
+                prefsStore = prefsStore
             )
         }
     }

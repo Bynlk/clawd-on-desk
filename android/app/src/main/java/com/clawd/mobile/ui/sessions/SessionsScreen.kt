@@ -67,11 +67,6 @@ fun SessionsScreen(
     }
 
     val isConnected = connectionState == ConnectionState.CONNECTED
-    val hostLabel = if (isConnected) {
-        webSocket.currentHost?.let { host ->
-            webSocket.currentPort?.let { port -> "$host:$port" }
-        } ?: ""
-    } else ""
 
     val currentRequest = pendingRequests.firstOrNull()
     var showSheet by remember { mutableStateOf(false) }
@@ -83,7 +78,10 @@ fun SessionsScreen(
     // Bottom nav selected tab
     var selectedTab by remember { mutableStateOf(0) }
 
-    // Reset tab to "会话" when screen resumes (e.g. returning from scan/manual)
+    // Devices placeholder dialog
+    var showDevicesPlaceholder by remember { mutableStateOf(false) }
+
+    // Reset tab to "会话" when screen resumes
     LaunchedEffect(Unit) {
         navController.currentBackStackEntryFlow.collect {
             selectedTab = 0
@@ -93,56 +91,87 @@ fun SessionsScreen(
     Scaffold(
         containerColor = ClawdBgDark
     ) { padding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            if (connectionState == ConnectionState.DISCONNECTED && sessions.isEmpty()) {
-                EmptyState(
-                    onScan = { navController.navigate("scan") },
-                    onManual = { navController.navigate("manual") }
-                )
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 100.dp),
-                    verticalArrangement = Arrangement.spacedBy(0.dp)
-                ) {
-                    // TopBar
-                    item { TopBar(onScan = { navController.navigate("scan") }, onSettings = { navController.navigate("manual") }) }
+            // Fixed TopBar with connection status
+            FixedTopBar(isConnected = isConnected)
 
-                    // Connection badge
-                    item {
-                        ConnectionBadge(isConnected = isConnected, hostLabel = hostLabel)
-                    }
+            // Main content
+            Box(modifier = Modifier.weight(1f)) {
+                if (connectionState == ConnectionState.DISCONNECTED && sessions.isEmpty()) {
+                    EmptyState(
+                        onScan = { navController.navigate("settings") },
+                        onManual = { navController.navigate("settings") }
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 100.dp),
+                        verticalArrangement = Arrangement.spacedBy(0.dp)
+                    ) {
+                        // Section label
+                        item {
+                            SectionLabel(title = "活跃会话", count = sessions.size)
+                        }
 
-                    // Section label
-                    item {
-                        SectionLabel(title = "活跃会话", count = sessions.size)
-                    }
-
-                    // Session cards
-                    items(sessions, key = { it.id }) { session ->
-                        SessionCard(
-                            session = session,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
-                        )
+                        // Session cards
+                        items(sessions, key = { it.id }) { session ->
+                            SessionCard(
+                                session = session,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
+                            )
+                        }
                     }
                 }
-            }
 
-            // Bottom navigation
-            BottomNav(
-                selectedTab = selectedTab,
-                onTabSelected = { tab ->
-                    selectedTab = tab
-                    when (tab) {
-                        1 -> navController.navigate("scan")
-                        2 -> navController.navigate("manual")
+                // Bottom navigation
+                BottomNav(
+                    selectedTab = selectedTab,
+                    onTabSelected = { tab ->
+                        selectedTab = tab
+                        when (tab) {
+                            1 -> { showDevicesPlaceholder = true }
+                            2 -> navController.navigate("settings")
+                        }
+                    },
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                )
+            }
+        }
+
+        // Devices placeholder dialog
+        if (showDevicesPlaceholder) {
+            AlertDialog(
+                onDismissRequest = {
+                    showDevicesPlaceholder = false
+                    selectedTab = 0
+                },
+                containerColor = ClawdCardDark,
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(ClawdIcons.DeviceDesktop, null, tint = ClawdAccent, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("设备", color = ClawdTextDark)
                     }
                 },
-                modifier = Modifier.align(Alignment.BottomCenter)
+                text = {
+                    Text(
+                        "未来中继服务，敬请期待。\n\n中继服务将支持通过云端中继连接 PC 端，无需处于同一局域网。",
+                        fontSize = 13.sp,
+                        color = ClawdFaintDark
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showDevicesPlaceholder = false
+                        selectedTab = 0
+                    }) {
+                        Text("知道了", color = ClawdAccent)
+                    }
+                }
             )
         }
 
@@ -168,118 +197,52 @@ fun SessionsScreen(
     }
 }
 
-// ─── TopBar ───────────────────────────────────────────────────────────
+// ─── Fixed TopBar ─────────────────────────────────────────────────
 
 @Composable
-private fun TopBar(onScan: () -> Unit, onSettings: () -> Unit) {
+private fun FixedTopBar(isConnected: Boolean) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(start = 20.dp, end = 12.dp, top = 18.dp, bottom = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Left: brand
-        Column {
-            Text(
-                text = "CLAWD",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                color = ClawdAccent,
-                letterSpacing = 0.6.sp
-            )
-            Text(
-                text = "Mobile",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = ClawdTextDark,
-                modifier = Modifier.padding(top = 1.dp)
-            )
-        }
+        // Brand
+        Text(
+            text = "CLAWD",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            color = ClawdAccent,
+            letterSpacing = 0.6.sp
+        )
+        Text(
+            text = " Mobile",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            color = ClawdTextDark
+        )
 
-        // Right: QR + Settings buttons
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            IconButton(
-                onClick = onScan,
-                modifier = Modifier
-                    .size(36.dp)
-                    .border(0.5.dp, ClawdBorderDark, RoundedCornerShape(10.dp))
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(ClawdIconBtnBg)
-            ) {
-                Icon(
-                    ClawdIcons.QrCode,
-                    "扫码",
-                    tint = ClawdMutedDark,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-            IconButton(
-                onClick = onSettings,
-                modifier = Modifier
-                    .size(36.dp)
-                    .border(0.5.dp, ClawdBorderDark, RoundedCornerShape(10.dp))
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(ClawdIconBtnBg)
-            ) {
-                Icon(
-                    ClawdIcons.Settings,
-                    "设置",
-                    tint = ClawdMutedDark,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-        }
-    }
-}
+        Spacer(modifier = Modifier.weight(1f))
 
-// ─── Connection Badge ─────────────────────────────────────────────────
-
-@Composable
-private fun ConnectionBadge(isConnected: Boolean, hostLabel: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 0.dp)
-            .padding(bottom = 14.dp)
-            .border(0.5.dp, if (isConnected) ClawdGreenBorder else ClawdBorderDark, RoundedCornerShape(8.dp))
-            .background(
-                if (isConnected) ClawdGreenBg else ClawdCardDark.copy(alpha = 0.5f),
-                RoundedCornerShape(8.dp)
-            )
-            .padding(horizontal = 12.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Status dot
+        // Connection status dot + text
         Box(
             modifier = Modifier
                 .size(7.dp)
                 .clip(CircleShape)
                 .background(if (isConnected) ClawdGreenBright else ClawdFaintDark)
         )
-        // Text
         Text(
             text = if (isConnected) "已连接" else "未连接",
-            fontSize = 12.sp,
+            fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
             color = if (isConnected) ClawdGreenBright else ClawdFaintDark,
             modifier = Modifier.padding(start = 6.dp)
         )
-        // Host:port
-        if (hostLabel.isNotEmpty()) {
-            Text(
-                text = hostLabel,
-                fontSize = 11.sp,
-                color = ClawdMuted,
-                fontFamily = FontFamily.Monospace,
-                modifier = Modifier.padding(start = 8.dp)
-            )
-        }
     }
 }
 
-// ─── Section Label ────────────────────────────────────────────────────
+// ─── Section Label ────────────────────────────────────────────────
 
 @Composable
 private fun SectionLabel(title: String, count: Int) {
@@ -296,7 +259,7 @@ private fun SectionLabel(title: String, count: Int) {
     )
 }
 
-// ─── Session Card ─────────────────────────────────────────────────────
+// ─── Session Card ─────────────────────────────────────────────────
 
 @Composable
 private fun SessionCard(session: Session, modifier: Modifier = Modifier) {
@@ -470,7 +433,7 @@ private fun SessionCard(session: Session, modifier: Modifier = Modifier) {
     }
 }
 
-// ─── Event Timeline ───────────────────────────────────────────────────
+// ─── Event Timeline ───────────────────────────────────────────────
 
 @Composable
 private fun EventTimeline(events: List<RecentEvent>) {
@@ -507,14 +470,14 @@ private fun EventTimeline(events: List<RecentEvent>) {
     }
 }
 
-// ─── Bottom Navigation ────────────────────────────────────────────────
+// ─── Bottom Navigation ────────────────────────────────────────────
 
 @Composable
 private fun BottomNav(selectedTab: Int, onTabSelected: (Int) -> Unit, modifier: Modifier = Modifier) {
     val tabs = listOf(
         Triple(ClawdIcons.LayoutList, "会话", 0),
         Triple(ClawdIcons.DeviceDesktop, "设备", 1),
-        Triple(ClawdIcons.UserCircle, "我的", 2)
+        Triple(ClawdIcons.Settings, "设置", 2)
     )
 
     Row(
@@ -554,7 +517,7 @@ private fun BottomNav(selectedTab: Int, onTabSelected: (Int) -> Unit, modifier: 
     }
 }
 
-// ─── Approval Sheet ───────────────────────────────────────────────────
+// ─── Approval Sheet ───────────────────────────────────────────────
 
 @Composable
 private fun ApprovalSheet(
@@ -688,7 +651,7 @@ private fun ApprovalSheet(
     }
 }
 
-// ─── Empty State ──────────────────────────────────────────────────────
+// ─── Empty State ──────────────────────────────────────────────────
 
 @Composable
 private fun EmptyState(onScan: () -> Unit, onManual: () -> Unit) {
@@ -704,6 +667,8 @@ private fun EmptyState(onScan: () -> Unit, onManual: () -> Unit) {
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text("扫码配对开始监控", fontSize = 15.sp, color = ClawdMutedDark)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("前往「设置」扫码或手动连接", fontSize = 12.sp, color = ClawdFaintDark)
             Spacer(modifier = Modifier.height(24.dp))
             Button(
                 onClick = onScan,
@@ -713,23 +678,13 @@ private fun EmptyState(onScan: () -> Unit, onManual: () -> Unit) {
                 ),
                 shape = RoundedCornerShape(10.dp)
             ) {
-                Icon(ClawdIcons.QrCode, null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("扫码配对")
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = onManual,
-                border = BorderStroke(0.5.dp, ClawdCardBorderDark),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text("手动连接", color = ClawdMutedDark)
+                Text("前往设置")
             }
         }
     }
 }
 
-// ─── Utils ────────────────────────────────────────────────────────────
+// ─── Utils ────────────────────────────────────────────────────────
 
 private fun shortPath(p: String): String {
     val parts = p.split("/", "\\")
