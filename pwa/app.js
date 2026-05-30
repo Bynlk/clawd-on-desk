@@ -180,15 +180,14 @@
           if (data.toolName) html += '<div class="approval-tool">' + icon("tool") + ' ' + esc(data.toolName) + '</div>';
           if (data.toolInputSummary) html += '<div class="approval-summary">' + esc(data.toolInputSummary) + '</div>';
           html += '<div class="approval-actions">';
+          html += '<button class="approval-btn allow" data-request="' + requestId + '" data-behavior="allow">允许</button>';
+          html += '<button class="approval-btn deny" data-request="' + requestId + '" data-behavior="deny">拒绝</button>';
           if (data.suggestions && data.suggestions.length > 0) {
             for (var i = 0; i < data.suggestions.length; i++) {
               var sug = data.suggestions[i];
-              var cls = sug.behavior === "allow" ? "allow" : sug.behavior === "deny" ? "deny" : "neutral";
-              html += '<button class="approval-btn ' + cls + '" data-request="' + requestId + '" data-behavior="' + esc(sug.behavior || "") + '" data-index="' + i + '">' + esc(sug.label || sug.behavior || "选择") + '</button>';
+              if (sug.behavior === "allow" || sug.behavior === "deny") continue;
+              html += '<button class="approval-btn neutral" data-request="' + requestId + '" data-behavior="' + esc(sug.behavior || "") + '" data-index="' + i + '">' + esc(sug.label || sug.behavior || "选择") + '</button>';
             }
-          } else {
-            html += '<button class="approval-btn allow" data-request="' + requestId + '" data-behavior="allow">允许</button>';
-            html += '<button class="approval-btn deny" data-request="' + requestId + '" data-behavior="deny">拒绝</button>';
           }
           html += '</div>';
         } else {
