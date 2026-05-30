@@ -3489,17 +3489,6 @@ html, body {
   font-size: 13px;
   padding: 10px 0;
 }
-.mobile-qr-wrap {
-  display: flex;
-  justify-content: center;
-  padding: 16px 0;
-}
-.mobile-qr-img {
-  border-radius: 12px;
-  background: #fff;
-  padding: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-}
 .mobile-conn-details {
   margin-top: 8px;
 }

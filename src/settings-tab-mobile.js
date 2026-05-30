@@ -42,13 +42,6 @@
 
       let html = '';
 
-      // QR Code
-      if (info.qrDataUrl) {
-        html += '<div class="mobile-qr-wrap">';
-        html += `<img class="mobile-qr-img" src="${info.qrDataUrl}" alt="QR Code" width="200" height="200">`;
-        html += '</div>';
-      }
-
       // Connection details
       html += '<div class="mobile-conn-details">';
       html += `<div class="mobile-conn-row"><span class="mobile-conn-label">LAN IP</span><span class="mobile-conn-value">${escapeHtml(info.lanIp)}</span>`;

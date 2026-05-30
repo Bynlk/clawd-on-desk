@@ -454,15 +454,7 @@ function registerSettingsIpc(options = {}) {
         if (lanIp !== "127.0.0.1") break;
       }
       const pairUrl = `clawd://${lanIp}:${port}/${tok}`;
-      let qrDataUrl = null;
-      try {
-        const QRCode = require("qrcode");
-        qrDataUrl = await QRCode.toDataURL(pairUrl, {
-          width: 300, margin: 2,
-          color: { dark: "#000000", light: "#ffffff" },
-        });
-      } catch {}
-      return { status: "ok", port, token: tok, lanIp, pairUrl, qrDataUrl };
+      return { status: "ok", port, token: tok, lanIp, pairUrl };
     } catch (err) {
       return { status: "error", message: (err && err.message) || String(err) };
     }
