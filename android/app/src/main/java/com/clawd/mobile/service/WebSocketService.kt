@@ -120,7 +120,7 @@ class WebSocketService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_SERVICE)
             .setContentTitle("Clawd Mobile")
             .setContentText(status)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setSilent(true)
