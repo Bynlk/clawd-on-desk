@@ -34,7 +34,7 @@ jobs:
         run: gradle assembleDebug --no-daemon
 
       - name: Upload Debug APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: clawd-mobile-debug
           path: android/app/build/outputs/apk/debug/*.apk
@@ -63,7 +63,7 @@ jobs:
 
       - name: Upload lint report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lint-report
           path: android/app/build/reports/lint-results-*.html
