@@ -117,3 +117,8 @@ android/build/
 android/app/build/
 android/local.properties
 android/*.hprof
+
+# Android release keystore
+android/release-keystore.jks
+android/release-keystore.b64
+android/ks_b64.tmp

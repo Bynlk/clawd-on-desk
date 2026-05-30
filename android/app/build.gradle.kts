@@ -13,10 +13,22 @@ android {
         applicationId = "com.clawd.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 38
-        versionName = "1.5.9"
+        versionCode = 1
+        versionName = "0.1.0"
         ndk {
             abiFilters += listOf("arm64-v8a")
+        }
+    }
+
+    signingConfigs {
+        create("release") {
+            val ks = System.getenv("KEYSTORE_FILE")
+            if (ks != null && file(ks).exists()) {
+                storeFile = file(ks)
+                storePassword = System.getenv("STORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
         }
     }
 
@@ -24,6 +36,10 @@ android {
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            val ks = System.getenv("KEYSTORE_FILE")
+            if (ks != null && file(ks).exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
         debug {
             isMinifyEnabled = true
