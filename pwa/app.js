@@ -31,32 +31,6 @@
     SubagentStart: "子代理启动", SubagentStop: "子代理停止",
   };
 
-  var SETTINGS_SECTIONS = [
-    { key: "general", label: "通用", fields: [
-      { key: "lang", label: "语言" },
-      { key: "showTray", label: "显示托盘图标", type: "boolean" },
-      { key: "showDock", label: "显示 Dock 图标", type: "boolean" },
-      { key: "openAtLogin", label: "开机自启", type: "boolean" },
-      { key: "bubbleFollowPet", label: "气泡跟随宠物", type: "boolean" },
-    ]},
-    { key: "session", label: "会话", fields: [
-      { key: "sessionHudEnabled", label: "会话 HUD", type: "boolean" },
-      { key: "sessionHudShowStateLabels", label: "显示状态标签", type: "boolean" },
-      { key: "sessionHudShowElapsed", label: "显示经过时间", type: "boolean" },
-      { key: "sessionHudCleanupDetached", label: "清理已断开会话", type: "boolean" },
-    ]},
-    { key: "bubbles", label: "气泡 & 通知", fields: [
-      { key: "permissionBubblesEnabled", label: "权限气泡", type: "boolean" },
-      { key: "soundMuted", label: "静音", type: "boolean" },
-      { key: "soundVolume", label: "音量", type: "range" },
-    ]},
-    { key: "visual", label: "视觉", fields: [
-      { key: "theme", label: "主题" },
-      { key: "flashTaskbarOnComplete", label: "完成时闪烁任务栏", type: "boolean" },
-      { key: "lowPowerIdleMode", label: "低功耗空闲模式", type: "boolean" },
-    ]},
-    { key: "agents", label: "代理", fields: [] },
-  ];
 
   var MAX_HISTORY = 5;
   var MAX_LOG_LINES = 200;
@@ -257,27 +231,32 @@
       this.ws = null; this.config = null;
       this.reconnectDelay = 1000; this.maxReconnectDelay = 30000;
       this.reconnectTimer = null; this.state = "disconnected";
+      this.retryCount = 0; this.maxRetries = 10;
       this.onStateChange = null; this.onMessage = null; this.onDisconnected = null;
     }
 
     connect(config) {
       this.config = config;
+      this.retryCount = 0;
+      this.reconnectDelay = 1000;
       this._saveToHistory(config);
       this._doConnect();
     }
 
     _doConnect() {
+      if (!this.config) return;
       if (this.ws) { try { this.ws.close(); } catch {} }
       var url = "ws://" + this.config.host + ":" + this.config.port + "/ws?token=" + this.config.token;
       this._setState("connecting");
       log("Connecting to " + this.config.host + ":" + this.config.port + "...");
       try { this.ws = new WebSocket(url); } catch (err) { log("WS create failed: " + err.message); this._scheduleReconnect(); return; }
       var self = this;
-      this.ws.onopen = function() { self.reconnectDelay = 1000; self._setState("connected"); log("Connected"); showToast("已连接到桌面端", "success"); };
+      var connected = false;
+      this.ws.onopen = function() { connected = true; self.retryCount = 0; self.reconnectDelay = 1000; self._setState("connected"); log("Connected"); showToast("已连接到桌面端", "success"); };
       this.ws.onmessage = function(event) { try { var msg = JSON.parse(event.data); if (self.onMessage) self.onMessage(msg); } catch {} };
       this.ws.onclose = function(event) {
         if (event.code === 1008) { self._setState("auth_failed"); log("Auth failed"); showToast("认证失败", "error"); return; }
-        if (self.state === "connected") log("Disconnected (code: " + event.code + ")");
+        if (connected) log("Disconnected (code: " + event.code + ")");
         if (self.onDisconnected) self.onDisconnected();
         self._scheduleReconnect();
       };
@@ -287,15 +266,17 @@
     send(data) { if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(typeof data === "string" ? data : JSON.stringify(data)); }
 
     _scheduleReconnect() {
+      if (!this.config) return;
+      this.retryCount++;
+      if (this.retryCount > this.maxRetries) {
+        this._setState("disconnected");
+        log("Max retries (" + this.maxRetries + ") reached, stopping");
+        showToast("连接失败，请检查地址和 Token", "error");
+        return;
+      }
       this._setState("reconnecting");
       var self = this;
       this.reconnectTimer = setTimeout(function() { self.reconnectDelay = Math.min(self.reconnectDelay * 2, self.maxReconnectDelay); self._doConnect(); }, this.reconnectDelay);
-    }
-
-    disconnect() {
-      clearTimeout(this.reconnectTimer);
-      if (this.ws) { try { this.ws.close(1000, "User disconnect"); } catch {} }
-      this.ws = null; this._setState("disconnected"); log("Disconnected by user");
     }
 
     _setState(state) { this.state = state; if (this.onStateChange) this.onStateChange(state); }
@@ -413,9 +394,9 @@
   // === SettingsRenderer ===
 
   class SettingsRenderer {
-    constructor(container) { this.container = container; this.pcSettings = null; }
+    constructor(container) { this.container = container; }
 
-    render(connection, onConnect, onDisconnect) {
+    render(connection, onConnect) {
       var self = this;
       var html = '';
 
@@ -432,7 +413,7 @@
       html += '<div class="input-group"><label>地址</label><input id="input-host" type="text" placeholder="192.168.1.10" autocomplete="off" value="' + esc((connection.config && connection.config.host) || "") + '"></div>';
       html += '<div class="input-group"><label>端口</label><input id="input-port" type="number" placeholder="23334" value="' + esc(String((connection.config && connection.config.port) || "23334")) + '"></div>';
       html += '<div class="input-group"><label>Token</label><input id="input-token" type="text" placeholder="32位token" autocomplete="off" value="' + esc((connection.config && connection.config.token) || "") + '"></div>';
-      html += '<div class="btn-group"><button id="btn-connect" class="primary-btn">连接</button><button id="btn-disconnect" class="secondary-btn">断开</button></div>';
+      html += '<div class="btn-group"><button id="btn-connect" class="primary-btn">连接</button></div>';
       var history = connection.getHistory();
       if (history.length > 0) {
         html += '<div class="history-list">';
@@ -444,28 +425,7 @@
       }
       html += '</div>';
 
-      // PC端 Settings (read-only)
-      if (this.pcSettings) {
-        for (var si = 0; si < SETTINGS_SECTIONS.length; si++) {
-          var section = SETTINGS_SECTIONS[si];
-          html += '<div class="settings-section"><div class="settings-section-title">' + esc(section.label) + '</div>';
-          if (section.key === "agents" && this.pcSettings.agents) {
-            for (var agentId in this.pcSettings.agents) {
-              if (!this.pcSettings.agents.hasOwnProperty(agentId)) continue;
-              html += '<div class="settings-row"><span class="settings-label">' + esc(agentId) + '</span><span class="settings-value">' + (this.pcSettings.agents[agentId].enabled ? '✓' : '✗') + '</span></div>';
-            }
-          } else {
-            for (var fi = 0; fi < section.fields.length; fi++) {
-              var field = section.fields[fi];
-              var val = this.pcSettings[field.key];
-              html += '<div class="settings-row"><span class="settings-label">' + esc(field.label) + '</span><span class="settings-value">' + esc(formatSettingsValue(val, field)) + '</span></div>';
-            }
-          }
-          html += '</div>';
-        }
-      }
-
-      // Log section
+      // Log section (collapsed by default)
       html += '<div class="log-section">';
       html += '<button class="log-toggle" id="btn-toggle-log">日志 (' + _logBuffer.length + ')</button>';
       html += '<div class="log-body" id="settings-log-content"></div>';
@@ -481,7 +441,6 @@
           div.textContent = _logBuffer[li];
           logEl.appendChild(div);
         }
-        logEl.scrollTop = logEl.scrollHeight;
       }
 
       // Bind log toggle
@@ -491,16 +450,16 @@
         logToggle.addEventListener("click", function() {
           logToggle.classList.toggle("open");
           logBody.classList.toggle("open");
+          if (logBody.classList.contains("open")) logBody.scrollTop = logBody.scrollHeight;
         });
       }
 
-      this._bindEvents(connection, onConnect, onDisconnect);
+      this._bindEvents(connection, onConnect);
     }
 
-    _bindEvents(connection, onConnect, onDisconnect) {
+    _bindEvents(connection, onConnect) {
       var self = this;
       var btnConnect = document.getElementById("btn-connect");
-      var btnDisconnect = document.getElementById("btn-disconnect");
       if (btnConnect) btnConnect.addEventListener("click", function() {
         var host = document.getElementById("input-host").value.trim();
         var port = parseInt(document.getElementById("input-port").value, 10);
@@ -508,7 +467,6 @@
         if (!host || !port || !token) { showToast("请填写完整连接信息", "error"); return; }
         onConnect({ host: host, port: port, token: token });
       });
-      if (btnDisconnect) btnDisconnect.addEventListener("click", function() { onDisconnect(); });
 
       this.container.querySelectorAll(".history-connect").forEach(function(btn) {
         btn.addEventListener("click", function() {
@@ -519,38 +477,27 @@
       this.container.querySelectorAll(".history-delete").forEach(function(btn) {
         btn.addEventListener("click", function() {
           connection.deleteHistory(parseInt(this.getAttribute("data-index"), 10));
-          self.render(connection, onConnect, onDisconnect);
+          self.render(connection, onConnect);
         });
       });
     }
 
     fetchPcSettings() {
-      var self = this;
       var host = window.location.hostname;
       var port = window.location.port;
       fetch("http://" + host + ":" + port + "/api/connection-info")
         .then(function(r) { return r.json(); })
         .then(function(data) {
-          if (data && data.settings) {
-            self.pcSettings = data.settings;
-            var hostInput = document.getElementById("input-host");
-            var portInput = document.getElementById("input-port");
-            var tokenInput = document.getElementById("input-token");
-            if (hostInput && !hostInput.value && data.lanIp) hostInput.value = data.lanIp;
-            if (portInput && !portInput.value && data.port) portInput.value = data.port;
-            if (tokenInput && !tokenInput.value && data.token) tokenInput.value = data.token;
-          }
+          if (!data) return;
+          var hostInput = document.getElementById("input-host");
+          var portInput = document.getElementById("input-port");
+          var tokenInput = document.getElementById("input-token");
+          if (hostInput && !hostInput.value && data.lanIp) hostInput.value = data.lanIp;
+          if (portInput && !portInput.value && data.port) portInput.value = data.port;
+          if (tokenInput && !tokenInput.value && data.token) tokenInput.value = data.token;
         })
         .catch(function() {});
     }
-  }
-
-  function formatSettingsValue(val, field) {
-    if (val === undefined || val === null) return "—";
-    if (field && field.type === "boolean") return val ? "是" : "否";
-    if (field && field.type === "range") return String(Math.round(val * 100)) + "%";
-    if (typeof val === "object") return JSON.stringify(val);
-    return String(val);
   }
 
   // === App ===
@@ -621,8 +568,7 @@
       var self = this;
       this.settingsRenderer.render(
         this.connection,
-        function(config) { self.connection.connect(config); },
-        function() { self.connection.disconnect(); }
+        function(config) { self.connection.connect(config); }
       );
     }
 
