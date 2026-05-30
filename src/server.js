@@ -50,7 +50,6 @@ const crypto = require("crypto");
 const os = require("os");
 const fs = require("fs");
 const path = require("path");
-const QRCode = require("qrcode");
 
 module.exports = function initServer(ctx) {
 
@@ -224,177 +223,6 @@ function stopClaudeSettingsWatcher() {
   return claudeSettingsWatcher.stop();
 }
 
-function getLocalIP() {
-  const interfaces = os.networkInterfaces();
-  const candidates = [];
-
-  for (const [name, addrs] of Object.entries(interfaces)) {
-    for (const addr of addrs) {
-      if (addr.family === "IPv4" && !addr.internal) {
-        candidates.push({ name, address: addr.address });
-      }
-    }
-  }
-
-  // Prefer LAN addresses (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
-  const lan = candidates.find(c =>
-    /^192\.168\./.test(c.address) ||
-    /^10\./.test(c.address) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(c.address)
-  );
-
-  if (lan) {
-    console.log(`[Mobile] Selected LAN IP: ${lan.address} (${lan.name})`);
-    return lan.address;
-  }
-
-  // Fallback to first non-internal
-  const fallback = candidates[0];
-  if (fallback) {
-    console.log(`[Mobile] Fallback IP: ${fallback.address} (${fallback.name})`);
-    return fallback.address;
-  }
-
-  console.log("[Mobile] No external IPv4 found, using 127.0.0.1");
-  return "127.0.0.1";
-}
-
-async function handleMobileQrImage(req, res) {
-  const pairUrl = `clawd://${getLocalIP()}:23334/${MOBILE_TOKEN}`;
-  try {
-    const buffer = await QRCode.toBuffer(pairUrl, {
-      width: 300,
-      margin: 2,
-      color: { dark: "#ffffff", light: "#1a1a2e" },
-      type: "png",
-    });
-    res.writeHead(200, {
-      "Content-Type": "image/png",
-      "Cache-Control": "no-cache",
-    });
-    res.end(buffer);
-  } catch (err) {
-    res.writeHead(500, { "Content-Type": "text/plain" });
-    res.end("QR generation failed: " + err.message);
-  }
-}
-
-async function handleMobilePairPage(req, res) {
-  const pairUrl = `clawd://${getLocalIP()}:23334/${MOBILE_TOKEN}`;
-  try {
-    const qrDataUrl = await QRCode.toDataURL(pairUrl, {
-      width: 300,
-      margin: 2,
-      color: { dark: "#ffffff", light: "#1a1a2e" },
-    });
-
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Clawd Mobile 配对</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      background: #1a1a2e; color: #eee;
-      font-family: -apple-system, system-ui, sans-serif;
-      display: flex; justify-content: center; align-items: center;
-      min-height: 100vh; padding: 20px;
-    }
-    .pair-card {
-      background: #16213e; border-radius: 16px; padding: 32px;
-      text-align: center; max-width: 400px; width: 100%;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-    }
-    h1 { font-size: 24px; margin-bottom: 8px; }
-    .subtitle { color: #a0a0b0; margin-bottom: 24px; font-size: 14px; }
-    .qr-container {
-      background: #fff; border-radius: 12px;
-      display: inline-block; padding: 16px; margin-bottom: 24px;
-    }
-    .qr-container img { display: block; }
-    .info {
-      background: #0f3460; border-radius: 8px;
-      padding: 12px; font-family: monospace; font-size: 13px;
-      word-break: break-all; margin-bottom: 16px;
-    }
-    .steps { text-align: left; font-size: 14px; line-height: 2; }
-    .steps li { margin-left: 20px; }
-    .token { color: #6c5ce7; font-weight: bold; }
-  </style>
-</head>
-<body>
-  <div class="pair-card">
-    <h1>Clawd Mobile</h1>
-    <p class="subtitle">扫码配对，开始监控</p>
-    <div class="qr-container">
-      <img src="${qrDataUrl}" alt="QR Code">
-    </div>
-    <div class="info">
-      ${getLocalIP()}:23334<br>
-      Token: <span class="token">${MOBILE_TOKEN}</span>
-    </div>
-    <ol class="steps">
-      <li>手机打开 Clawd Mobile PWA</li>
-      <li>点击「扫码配对」</li>
-      <li>对准此 QR 码</li>
-      <li>自动连接成功</li>
-    </ol>
-  </div>
-</body>
-</html>`;
-
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    res.end(html);
-  } catch (err) {
-    res.writeHead(500, { "Content-Type": "text/plain" });
-    res.end("QR generation failed: " + err.message);
-  }
-}
-
-const MOBILE_DIR = path.join(__dirname, "..", "mobile");
-const MOBILE_MIME = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "application/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".png": "image/png",
-  ".svg": "image/svg+xml",
-  ".ico": "image/x-icon",
-};
-
-function serveMobileStatic(req, res) {
-  let urlPath = req.url.split("?")[0];
-  if (urlPath === "/mobile/" || urlPath === "/mobile") urlPath = "/mobile/index.html";
-
-  const filePath = path.join(MOBILE_DIR, path.relative("/mobile", urlPath));
-
-  const resolvedPath = path.resolve(filePath);
-  const resolvedBase = path.resolve(MOBILE_DIR);
-  if (!resolvedPath.startsWith(resolvedBase)) {
-    res.writeHead(403);
-    res.end("Forbidden");
-    return;
-  }
-
-  const ext = path.extname(filePath).toLowerCase();
-  const contentType = MOBILE_MIME[ext] || "application/octet-stream";
-
-  fs.readFile(filePath, (err, data) => {
-    if (err) {
-      res.writeHead(404);
-      res.end("Not found");
-      return;
-    }
-    res.writeHead(200, {
-      "Content-Type": contentType,
-      "Cache-Control": ext === ".html" ? "no-cache" : "public, max-age=3600",
-    });
-    res.end(data);
-  });
-}
-
 function startHttpServer() {
   httpServer = createHttpServer((req, res) => {
     if (req.method === "GET" && req.url === "/state") {
@@ -413,12 +241,6 @@ function startHttpServer() {
         ctx,
         createRequestHookRecorder,
       });
-    } else if (req.method === "GET" && req.url === "/mobile/pair") {
-      handleMobilePairPage(req, res);
-    } else if (req.method === "GET" && req.url === "/mobile/qr") {
-      handleMobileQrImage(req, res);
-    } else if (req.method === "GET" && req.url.startsWith("/mobile/")) {
-      serveMobileStatic(req, res);
     } else {
       res.writeHead(404);
       res.end();
@@ -477,35 +299,6 @@ function startHttpServer() {
     writeRuntimeConfigFn(activeServerPort);
     console.log(`Clawd state server listening on 127.0.0.1:${activeServerPort}`);
     console.log(`  Mobile companion token: ${MOBILE_TOKEN}`);
-    // mDNS 服务广播
-    try {
-      const bonjour = require("bonjour")();
-      const mdnsService = bonjour.publish({
-        name: "Clawd Desktop",
-        type: "clawd",
-        protocol: "tcp",
-        port: activeServerPort,
-        txt: {
-          path: "/ws",
-          token_required: "true",
-          version: "1",
-          app: "clawd-on-desk",
-        },
-      });
-      console.log(`  mDNS: _clawd._tcp on port ${activeServerPort}`);
-      mobileWS._bonjour = bonjour;
-      mobileWS._mdnsService = mdnsService;
-    } catch (err) {
-      console.warn("[mDNS] Failed to publish:", err.message);
-    }
-    // 终端 QR 码
-    QRCode.toString(
-      `clawd://${getLocalIP()}:23334/${MOBILE_TOKEN}`,
-      { type: "terminal", small: true },
-      (err, str) => {
-        if (!err) console.log(str);
-      }
-    );
     // Defer hook/plugin registration off the startup path. Each sync call
     // reads+parses+writes a config JSON (50-150ms cumulative on slow disks),
     // and they operate on independent files for independent agents, so
@@ -602,7 +395,10 @@ function startMobileServer() {
         }
         clearTimeout(pending.timer);
         pendingMobileApprovals.delete(id);
-        try { pending.resolve(decision); } catch {}
+        const resolvedDecision = (decision === "allow" && Number.isFinite(data.suggestionIndex))
+          ? `suggestion:${data.suggestionIndex}`
+          : decision;
+        try { pending.resolve(resolvedDecision); } catch {}
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ ok: true }));
       });
@@ -656,12 +452,6 @@ function cleanup() {
   stopMobileServer();
   clearRuntimeConfigFn();
   stopClaudeSettingsWatcher();
-  if (mobileWS && mobileWS._mdnsService) {
-    mobileWS._mdnsService.stop();
-  }
-  if (mobileWS && mobileWS._bonjour) {
-    mobileWS._bonjour.destroy();
-  }
   if (mobileWS) mobileWS.close();
   if (httpServer) httpServer.close();
 }

@@ -10,6 +10,12 @@ const {
   findPendingPermissionForStateEvent,
 } = require("./server-permission-utils");
 const { resolveCodexOfficialHookState } = require("./server-codex-official-turns");
+const {
+  deriveSessionBadge,
+  deriveMobileChipFields,
+  BADGE_DOT_COLORS,
+  sessionDisplayTitle,
+} = require("./state-session-snapshot");
 
 // /state POST body size cap. Raised from 1024 to 4096 to give new fields
 // (session_title) headroom on top of cwd / pid_chain / host / etc. Still a
@@ -198,7 +204,7 @@ function handleStatePost(req, res, options) {
             preserveState,
             hookSource,
           });
-          if (mobileWS) {
+          if (mobileWS && event !== "SubagentStop") {
             const session = ctx.sessions ? ctx.sessions.get(sid) : null;
             const recentEvents = (session && Array.isArray(session.recentEvents))
               ? session.recentEvents
@@ -207,8 +213,32 @@ function handleStatePost(req, res, options) {
             const displayState = typeof ctx.resolveDisplayState === "function"
               ? ctx.resolveDisplayState()
               : state;
-            mobileWS.broadcastState(sid, {
-              state,
+            // sessionState: what updateSession actually stored (ONESHOT → "idle")
+            const sessionState = (session && session.state) || state;
+            // hookState: the original state from the hook, before ONESHOT collapse.
+            // Use this for badge/chip so mobile sees the real activity, not "idle".
+            const hookState = state;
+            const isReal = sessionState !== "idle" ||
+              recentEvents.some(e => e && e.event && e.event !== "SessionStart");
+            // Badge: ONESHOT states force "running" so mobile doesn't see grey during attention/error/etc.
+            const ONESHOT_STATES = new Set(["attention","error","sweeping","notification","carrying"]);
+            const effectiveBadge =
+              hookState === "attention" ? "done" :
+              hookState === "notification" ? "interrupted" :
+              hookState === "error" ? "interrupted" :
+              ONESHOT_STATES.has(hookState) ? "running" :
+              (session ? deriveSessionBadge(session) : "idle");
+            const badge = effectiveBadge;
+            const tempEvents = [...(session ? session.recentEvents || [] : [])];
+            if (event && (!tempEvents.length || tempEvents[tempEvents.length-1].event !== event)) {
+              tempEvents.push({ event, at: Date.now() });
+            }
+            const chip = deriveMobileChipFields(hookState, tempEvents);
+            console.log(`[chip-debug] hookState=${hookState} event=${event} tempLast=${JSON.stringify(tempEvents[tempEvents.length-1])} chip=${JSON.stringify(chip)}`);
+            console.log(`[mobile-increment] sid=${sid} hookState=${hookState} effectiveBadge=${effectiveBadge} chipText=${chip ? chip.text : null}`);
+            const mobilePayload = {
+              sessionId: sid,
+              state: sessionState,
               event: event,
               agentId: agentId,
               toolName: toolName || null,
@@ -217,9 +247,33 @@ function handleStatePost(req, res, options) {
               recentEvents,
               lastOutput,
               displayState,
-            });
+              badge,
+              displayTitle: session ? sessionDisplayTitle(sid, session, {}, {}) : (sessionTitle || null),
+              chipText: chip ? chip.text : null,
+              chipColor: chip ? chip.color : null,
+              dotColor: BADGE_DOT_COLORS[badge] || BADGE_DOT_COLORS.idle,
+              // session null → not yet created → hide from mobile
+              isVisible: session !== null && sessionState !== "sleeping" && !session.headless,
+            };
+            mobileWS.broadcastState(sid, mobilePayload);
             if (typeof broadcastHookEvent === "function") {
-              broadcastHookEvent({ type: "state", sessionId: sid, state, event, agentId, toolName: toolName || null, sessionTitle: sessionTitle || null, cwd: cwd || null, recentEvents, lastOutput, displayState, timestamp: Date.now() });
+              broadcastHookEvent({
+                type: "state",
+                sessionId: sid,
+                ...mobilePayload,
+                state: mobilePayload.state,
+                event,
+                agentId,
+                toolName: toolName || null,
+                sessionTitle: sessionTitle || null,
+                cwd: cwd || null,
+                recentEvents,
+                lastOutput,
+                displayState,
+                isReal,
+                badge,
+                timestamp: Date.now(),
+              });
             }
 
             // Forward tool output to mobile clients

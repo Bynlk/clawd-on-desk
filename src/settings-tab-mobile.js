@@ -14,6 +14,8 @@
     core.tabs["mobile"] = { render: render, patchInPlace: patchInPlace, onExit: onExit };
   }
 
+  var _pollTimer = null;
+
   function render(parent) {
     // 标题
     var title = document.createElement("h1");
@@ -30,6 +32,10 @@
     // 加载 QR 码和状态
     loadQrCode();
     loadStatus();
+
+    // Poll device list every 5 seconds
+    clearInterval(_pollTimer);
+    _pollTimer = setInterval(loadStatus, 5000);
   }
 
   function buildQrSection() {
@@ -208,7 +214,10 @@
     return false;
   }
 
-  function onExit() {}
+  function onExit() {
+    clearInterval(_pollTimer);
+    _pollTimer = null;
+  }
 
   function formatTime(ts) {
     if (!ts) return "--";

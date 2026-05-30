@@ -22,6 +22,7 @@ class MobileWSServer extends EventEmitter {
     this._heartbeatTimer = null;
     this._messageHandlers = new Set();
     this.connectionHistory = [];
+    this.externalClients = new Map();
 
     this.wss.on("connection", (ws, req) => this._handleConnection(ws, req));
   }
@@ -64,9 +65,13 @@ class MobileWSServer extends EventEmitter {
     console.log("[mobile-ws] Client connected (total: " + this.clients.size + ")");
     this.emit("client-connected", { clientId, ip: clientIp, connectedAt: now });
 
+    const cacheObj = Object.fromEntries(this.sessionCache);
+    const lastEntry = [...this.sessionCache.values()].reverse().find(e => e && e.state && e.state !== "idle") ||
+      [...this.sessionCache.values()].reverse().find(e => e) || null;
     ws.send(JSON.stringify({
       type: "snapshot",
-      sessions: Object.fromEntries(this.sessionCache),
+      sessions: cacheObj,
+      displayState: lastEntry ? (lastEntry.state || "idle") : "idle",
       timestamp: Date.now(),
     }));
 
@@ -142,11 +147,49 @@ class MobileWSServer extends EventEmitter {
   }
 
   broadcastState(sessionId, stateData) {
-    this.sessionCache.set(sessionId, { ...stateData, updatedAt: Date.now() });
+    const isReal = (stateData.state && stateData.state !== "idle") ||
+      (Array.isArray(stateData.recentEvents) &&
+        stateData.recentEvents.some(e => e && e.event && e.event !== "SessionStart"));
+    const enriched = { ...stateData, isReal, updatedAt: Date.now() };
+    this.sessionCache.set(sessionId, enriched);
     const message = JSON.stringify({
       type: "state",
       sessionId,
-      data: stateData,
+      data: enriched,
+      ...enriched,
+      displayState: enriched.displayState || enriched.state || "idle",
+      timestamp: Date.now(),
+    });
+    this._broadcast(message);
+  }
+
+  broadcastSessionSnapshot(snapshot) {
+    const sessionsMap = {};
+    for (const entry of snapshot.sessions) {
+      if (!entry.mobile || entry.mobile.isVisible === false) continue;
+      sessionsMap[entry.id] = {
+        sessionId: entry.id,
+        displayState: entry.state,
+        badge: entry.badge,
+        chipText: entry.mobile.chipText,
+        chipColor: entry.mobile.chipColor,
+        dotColor: entry.mobile.dotColor,
+        isVisible: entry.mobile.isVisible,
+        displayTitle: entry.displayTitle,
+        cwd: entry.cwd || null,
+        updatedAt: entry.updatedAt,
+        agentId: entry.agentId,
+        recentEvents: entry.recentEvents || [],
+        lastOutput: entry.lastOutput || null,
+        isReal: entry.isReal,
+      };
+    }
+    const lastSession = snapshot.sessions.find(s => s.id === snapshot.hudLastSessionId) || snapshot.sessions[0];
+    const displayState = lastSession ? lastSession.state : "idle";
+    const message = JSON.stringify({
+      type: "snapshot",
+      sessions: sessionsMap,
+      displayState,
       timestamp: Date.now(),
     });
     this._broadcast(message);
@@ -178,7 +221,7 @@ class MobileWSServer extends EventEmitter {
   }
 
   getClientCount() {
-    return this.clients.size;
+    return this.clients.size + this.externalClients.size;
   }
 
   onClientMessage(handler) {
@@ -204,11 +247,40 @@ class MobileWSServer extends EventEmitter {
         connectedAt: meta?.connectedAt || null,
       });
     }
+    for (const [id, info] of this.externalClients) {
+      list.push({
+        id,
+        ip: info.ip || "--",
+        connectedAt: info.connectedAt || null,
+      });
+    }
     return list;
   }
 
   getConnectionHistory() {
     return [...this.connectionHistory];
+  }
+
+  registerExternalClient(clientId, info) {
+    const now = Date.now();
+    this.externalClients.set(clientId, {
+      ip: info.ip || "unknown",
+      connectedAt: info.connectedAt || now,
+      res: info.res || null,
+    });
+    this.connectionHistory.push({ clientId, ip: info.ip || "unknown", connectedAt: now });
+    if (this.connectionHistory.length > MAX_HISTORY) {
+      this.connectionHistory = this.connectionHistory.slice(-MAX_HISTORY);
+    }
+    console.log("[mobile-ws] External client registered (total: " + this.getClientCount() + ")");
+    this.emit("client-connected", { clientId, ip: info.ip || "unknown", connectedAt: now });
+  }
+
+  unregisterExternalClient(clientId) {
+    if (!this.externalClients.has(clientId)) return;
+    this.externalClients.delete(clientId);
+    console.log("[mobile-ws] External client unregistered (total: " + this.getClientCount() + ")");
+    this.emit("client-disconnected", { clientId });
   }
 
   loadConnectionHistory(history) {
@@ -232,6 +304,16 @@ class MobileWSServer extends EventEmitter {
         return true;
       }
     }
+    const ext = this.externalClients.get(clientId);
+    if (ext) {
+      if (ext.res) {
+        try { ext.res.write(`data: ${JSON.stringify({ type: "disconnect", timestamp: Date.now() })}\n\n`); } catch {}
+        try { ext.res.end(); } catch {}
+      }
+      this.externalClients.delete(clientId);
+      this.emit("client-disconnected", { clientId });
+      return true;
+    }
     return false;
   }
 
@@ -242,6 +324,10 @@ class MobileWSServer extends EventEmitter {
     }
     this.clients.clear();
     this.clientMeta.clear();
+    for (const [, ext] of this.externalClients) {
+      if (ext.res) { try { ext.res.end(); } catch {} }
+    }
+    this.externalClients.clear();
     this.wss.close();
   }
 

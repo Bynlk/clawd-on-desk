@@ -860,53 +860,7 @@ function dismissPermissionForTerminal(perm) {
 function maybeStartRemoteApproval(permEntry) {
   if (!isRemoteApprovalActionable(permEntry)) return false;
 
-  // Mobile approval (prioritized over Telegram)
-  const mobileClient = typeof ctx.getMobileApprovalClient === "function" ? ctx.getMobileApprovalClient() : null;
-  if (mobileClient && typeof mobileClient.isEnabled === "function" && mobileClient.isEnabled()) {
-    const mobilePayload = buildRemoteApprovalPayload(permEntry);
-    if (mobilePayload) {
-      const mobileController = typeof AbortController === "function" ? new AbortController() : null;
-      if (mobileController) permEntry.remoteApprovalAbortController = mobileController;
-
-      let mobileRequest;
-      try {
-        mobileRequest = mobileClient.requestApproval(
-          mobilePayload,
-          mobileController ? { signal: mobileController.signal } : {}
-        );
-      } catch (err) {
-        if (mobileController && permEntry.remoteApprovalAbortController === mobileController) {
-          permEntry.remoteApprovalAbortController = null;
-        }
-        permLog(`mobile remote approval failed: ${compactRemoteApprovalText(err && err.message ? err.message : err, 200)}`);
-      }
-
-      if (mobileRequest) {
-        Promise.resolve(mobileRequest)
-          .then((decision) => {
-            if (decision === "allow" || decision === "deny") {
-              resolvePermissionEntry(permEntry, decision);
-              return;
-            }
-            if (decision && typeof decision === "object" && decision.type === "elicitation-submit") {
-              permEntry.resolvedUpdatedInput = decision.answers;
-              resolvePermissionEntry(permEntry, "allow");
-              return;
-            }
-          })
-          .catch((err) => {
-            permLog(`mobile remote approval failed: ${compactRemoteApprovalText(err && err.message ? err.message : err, 200)}`);
-          })
-          .finally(() => {
-            if (mobileController && permEntry.remoteApprovalAbortController === mobileController) {
-              permEntry.remoteApprovalAbortController = null;
-            }
-          });
-        return true;
-      }
-    }
-  }
-
+  // Mobile approval is handled by the SSE bridge in main.js (addPendingPermission override).
   // Telegram approval (fallback)
   const client = getTelegramApprovalClient();
   if (!client || typeof client.requestApproval !== "function") return false;

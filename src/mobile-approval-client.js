@@ -1,94 +1,75 @@
 const crypto = require("crypto");
 
+const DEFAULT_TIMEOUT_MS = 60000;
+
 class MobileApprovalClient {
-  constructor(getMobileWS) {
+  constructor(getMobileWS, options = {}) {
     this.getMobileWS = getMobileWS;
-    this._handler = null;
+    this.timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
+    this.pending = new Map();
+    this._handler = this._handleClientMessage.bind(this);
+    this._attachedServer = null;
   }
 
-  isEnabled() {
-    const mobileWS = this.getMobileWS();
-    return mobileWS && mobileWS.getClientCount() > 0;
-  }
-
-  requestApproval(payload, { signal } = {}) {
-    const mobileWS = this.getMobileWS();
-    if (!mobileWS || mobileWS.getClientCount() === 0) {
+  requestApproval(payload, options = {}) {
+    const mobileWS = typeof this.getMobileWS === "function" ? this.getMobileWS() : null;
+    if (!mobileWS || typeof mobileWS.getClientCount !== "function" || mobileWS.getClientCount() <= 0) {
+      return Promise.resolve(null);
+    }
+    if (typeof mobileWS.broadcast !== "function" || typeof mobileWS.onClientMessage !== "function") {
       return Promise.resolve(null);
     }
 
+    this._attach(mobileWS);
+
     const requestId = "perm_" + crypto.randomBytes(8).toString("hex");
+    const timeoutMs = options.timeoutMs || this.timeoutMs;
+    const request = {
+      type: "permission_request",
+      requestId,
+      data: payload || {},
+      timestamp: Date.now(),
+    };
 
     return new Promise((resolve) => {
-      let settled = false;
-
-      const handler = (ws, msg) => {
-        if (settled) return;
-        if (msg.type === "permission_response" && msg.requestId === requestId) {
-          settled = true;
-          mobileWS.offClientMessage(handler);
-          resolve(msg.behavior || null);
-        }
-        if (msg.type === "elicitation_response" && msg.requestId === requestId) {
-          settled = true;
-          mobileWS.offClientMessage(handler);
-          resolve({ type: "elicitation-submit", answers: msg.answers || {} });
-        }
-      };
-
-      mobileWS.onClientMessage(handler);
-
-      // 广播请求
-      const wsMsg = {
-        type: payload.isElicitation ? "elicitation_request" : "permission_request",
-        requestId,
-        timestamp: Date.now(),
-      };
-
-      if (payload.isElicitation) {
-        wsMsg.data = {
-          agentId: payload.agentId,
-          prompt: payload.prompt,
-          options: payload.options,
-          sessionId: payload.sessionId,
-        };
-      } else {
-        wsMsg.data = {
-          agentId: payload.agentId,
-          toolName: payload.toolName,
-          toolInputSummary: payload.detail,
-          sessionId: payload.sessionId,
-          suggestions: payload.suggestions || [],
-          timeout: payload.timeout || 90000,
-        };
-      }
-
-      mobileWS.broadcast(wsMsg);
-      console.log("[mobile-approval] Sent " + wsMsg.type + " to " + mobileWS.getClientCount() + " clients");
-
-      // 超时
-      const timeout = payload.timeout || 90000;
       const timer = setTimeout(() => {
-        if (!settled) {
-          settled = true;
-          mobileWS.offClientMessage(handler);
-          console.log("[mobile-approval] Timed out after " + timeout + "ms");
-          resolve(null);
-        }
-      }, timeout);
+        this.pending.delete(requestId);
+        resolve(null);
+      }, timeoutMs);
 
-      // 中止
-      if (signal) {
-        signal.addEventListener("abort", () => {
-          if (!settled) {
-            settled = true;
-            clearTimeout(timer);
-            mobileWS.offClientMessage(handler);
-            resolve(null);
-          }
-        });
-      }
+      this.pending.set(requestId, { resolve, timer });
+      mobileWS.broadcast(request);
     });
+  }
+
+  close() {
+    if (this._attachedServer && typeof this._attachedServer.offClientMessage === "function") {
+      this._attachedServer.offClientMessage(this._handler);
+    }
+    this._attachedServer = null;
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer);
+      pending.resolve(null);
+    }
+    this.pending.clear();
+  }
+
+  _attach(mobileWS) {
+    if (this._attachedServer === mobileWS) return;
+    if (this._attachedServer && typeof this._attachedServer.offClientMessage === "function") {
+      this._attachedServer.offClientMessage(this._handler);
+    }
+    mobileWS.onClientMessage(this._handler);
+    this._attachedServer = mobileWS;
+  }
+
+  _handleClientMessage(_ws, message) {
+    if (!message || message.type !== "permission_response" || !message.requestId) return;
+    const pending = this.pending.get(message.requestId);
+    if (!pending) return;
+    this.pending.delete(message.requestId);
+    clearTimeout(pending.timer);
+    pending.resolve(message.behavior || null);
   }
 }
 

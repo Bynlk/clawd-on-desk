@@ -1128,6 +1128,8 @@ const _stateCtx = {
     broadcastSessionHudSnapshot(snapshot);
     repositionFloatingBubbles();
     if (hardwareBuddyAdapter) hardwareBuddyAdapter.notifyStateChanged();
+    const ws = getMobileWS();
+    if (ws) ws.broadcastSessionSnapshot(snapshot);
   },
   onSessionRemoved: (sessionId) => {
     const ws = getMobileWS();

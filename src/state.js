@@ -785,7 +785,10 @@ function evictOldestSessionIfNeeded(sessionId) {
     }
   }
 
-  if (oldestId) sessions.delete(oldestId);
+  if (oldestId) {
+    sessions.delete(oldestId);
+    if (typeof ctx.onSessionRemoved === "function") ctx.onSessionRemoved(oldestId);
+  }
 }
 
 // Sets / clears `requiresCompletionAck` based on the current event.
@@ -1048,6 +1051,7 @@ function updateSession(sessionId, state, event, opts = {}) {
         debugSession(`subagent-stop restore ${describeSession(sessionId, sessions.get(sessionId))}`);
       } else {
         sessions.delete(sessionId);
+        if (typeof ctx.onSessionRemoved === "function") ctx.onSessionRemoved(sessionId);
         debugSession(`subagent-stop delete sid=${sessionId} reason=no-resume`);
       }
     } else {
@@ -1329,6 +1333,7 @@ function clearSessionsByAgent(agentId) {
     if (s && s.agentId === agentId) {
       if (agentId === "codex") cancelCodexExitProbe(id, "clear-sessions");
       sessions.delete(id);
+      if (typeof ctx.onSessionRemoved === "function") ctx.onSessionRemoved(id);
       if (agentId === "kimi-cli") disposeKimiSessionState(id, "kimi-clear-sessions");
       removed++;
     }

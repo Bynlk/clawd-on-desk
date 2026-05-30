@@ -505,6 +505,21 @@ function registerSettingsIpc(options = {}) {
     return { ok: true };
   });
 
+  // Auto-refresh: notify settings window when mobile clients change
+  const mobileWSRef = getMobileWS();
+  if (mobileWSRef && typeof mobileWSRef.on === "function") {
+    const onClientChange = () => {
+      const clients = mobileWSRef.getClientInfoList ? mobileWSRef.getClientInfoList() : [];
+      sendToRenderer("mobile:clients-updated", clients);
+    };
+    mobileWSRef.on("client-connected", onClientChange);
+    mobileWSRef.on("client-disconnected", onClientChange);
+    disposers.push(() => {
+      mobileWSRef.off("client-connected", onClientChange);
+      mobileWSRef.off("client-disconnected", onClientChange);
+    });
+  }
+
   return {
     dispose() {
       while (disposers.length) {
