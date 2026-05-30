@@ -403,11 +403,10 @@
   class SettingsRenderer {
     constructor(container) { this.container = container; }
 
-    render(connection, onConnect) {
-      var self = this;
+    render(connection) {
       var html = '';
 
-      // Connection section
+      // Connection status
       html += '<div class="settings-section">';
       html += '<div class="settings-section-title">连接</div>';
       var st = connection.state;
@@ -417,19 +416,6 @@
       html += '<span class="conn-status-text">' + stCfg.text + '</span>';
       if (connection.config) html += '<span class="conn-status-addr">' + esc(connection.config.host) + ':' + connection.config.port + '</span>';
       html += '</div>';
-      html += '<div class="input-group"><label>地址</label><input id="input-host" type="text" placeholder="192.168.1.10" autocomplete="off" value="' + esc((connection.config && connection.config.host) || "") + '"></div>';
-      html += '<div class="input-group"><label>端口</label><input id="input-port" type="number" placeholder="23334" value="' + esc(String((connection.config && connection.config.port) || "23334")) + '"></div>';
-      html += '<div class="input-group"><label>Token</label><input id="input-token" type="text" placeholder="32位token" autocomplete="off" value="' + esc((connection.config && connection.config.token) || "") + '"></div>';
-      html += '<div class="btn-group"><button id="btn-connect" class="primary-btn">连接</button></div>';
-      var history = connection.getHistory();
-      if (history.length > 0) {
-        html += '<div class="history-list">';
-        for (var i = 0; i < history.length; i++) {
-          var h = history[i];
-          html += '<div class="history-item"><span class="history-addr">' + esc(h.host) + ':' + h.port + '</span><span class="history-time">' + formatAgo(h.timestamp) + '</span><button class="history-connect" data-index="' + i + '">连接</button><button class="history-delete" data-index="' + i + '">&times;</button></div>';
-        }
-        html += '</div>';
-      }
       html += '</div>';
 
       // Log section (collapsed by default)
@@ -460,50 +446,6 @@
           if (logBody.classList.contains("open")) logBody.scrollTop = logBody.scrollHeight;
         });
       }
-
-      this._bindEvents(connection, onConnect);
-    }
-
-    _bindEvents(connection, onConnect) {
-      var self = this;
-      var btnConnect = document.getElementById("btn-connect");
-      if (btnConnect) btnConnect.addEventListener("click", function() {
-        var host = document.getElementById("input-host").value.trim();
-        var port = parseInt(document.getElementById("input-port").value, 10);
-        var token = document.getElementById("input-token").value.trim();
-        if (!host || !port || !token) { showToast("请填写完整连接信息", "error"); return; }
-        onConnect({ host: host, port: port, token: token });
-      });
-
-      this.container.querySelectorAll(".history-connect").forEach(function(btn) {
-        btn.addEventListener("click", function() {
-          var entry = connection.getHistory()[parseInt(this.getAttribute("data-index"), 10)];
-          if (entry) onConnect(entry);
-        });
-      });
-      this.container.querySelectorAll(".history-delete").forEach(function(btn) {
-        btn.addEventListener("click", function() {
-          connection.deleteHistory(parseInt(this.getAttribute("data-index"), 10));
-          self.render(connection, onConnect);
-        });
-      });
-    }
-
-    fetchPcSettings() {
-      var host = window.location.hostname;
-      var port = window.location.port;
-      fetch("http://" + host + ":" + port + "/api/connection-info")
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (!data) return;
-          var hostInput = document.getElementById("input-host");
-          var portInput = document.getElementById("input-port");
-          var tokenInput = document.getElementById("input-token");
-          if (hostInput && !hostInput.value && data.lanIp) hostInput.value = data.lanIp;
-          if (portInput && !portInput.value && data.port) portInput.value = data.port;
-          if (tokenInput && !tokenInput.value && data.token) tokenInput.value = data.token;
-        })
-        .catch(function() {});
     }
   }
 
@@ -572,11 +514,7 @@
     }
 
     _renderSettings() {
-      var self = this;
-      this.settingsRenderer.render(
-        this.connection,
-        function(config) { self.connection.connect(config); }
-      );
+      this.settingsRenderer.render(this.connection);
     }
 
     _bindConnection() {
