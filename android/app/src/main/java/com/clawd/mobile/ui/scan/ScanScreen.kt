@@ -135,7 +135,7 @@ private fun CameraPreview(onScanned: (ConnectionConfig) -> Unit) {
                             processImage(imageProxy) { config ->
                                 if (config != null && !scanned) {
                                     scanned = true
-                                    onScanned(config)
+                                    ContextCompat.getMainExecutor(ctx).execute { onScanned(config) }
                                 }
                             }
                         }
