@@ -117,23 +117,36 @@ class WebSocketService : Service() {
                     nm.notify(NOTIFICATION_ID, buildNotification(status))
 
                     // Alert notifications for connection state changes
+                    val alertOpenIntent = Intent(this@WebSocketService, MainActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    }
                     if (previousState == ConnectionState.CONNECTED && state == ConnectionState.DISCONNECTED) {
+                        val alertPending = PendingIntent.getActivity(
+                            this@WebSocketService, "conn:disconnect".hashCode(), alertOpenIntent,
+                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                        )
                         val alert = NotificationCompat.Builder(this@WebSocketService, NotificationHelper.CHANNEL_ALERT)
                             .setSmallIcon(android.R.drawable.ic_dialog_info)
                             .setContentTitle("😴 和桌面端失联了")
                             .setContentText("检查一下网络？")
                             .setPriority(NotificationCompat.PRIORITY_HIGH)
                             .setAutoCancel(true)
+                            .setContentIntent(alertPending)
                             .build()
                         nm.notify("conn:disconnect".hashCode(), alert)
                     }
                     if (previousState == ConnectionState.RECONNECTING && state == ConnectionState.CONNECTED) {
+                        val alertPending = PendingIntent.getActivity(
+                            this@WebSocketService, "conn:reconnect".hashCode(), alertOpenIntent,
+                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                        )
                         val alert = NotificationCompat.Builder(this@WebSocketService, NotificationHelper.CHANNEL_ALERT)
                             .setSmallIcon(android.R.drawable.ic_dialog_info)
                             .setContentTitle("✅ 重新连上啦")
                             .setContentText("继续摸鱼！")
                             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                             .setAutoCancel(true)
+                            .setContentIntent(alertPending)
                             .build()
                         nm.notify("conn:reconnect".hashCode(), alert)
                     }

@@ -13,8 +13,8 @@ android {
         applicationId = "com.clawd.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 37
-        versionName = "1.5.8"
+        versionCode = 38
+        versionName = "1.5.9"
         ndk {
             abiFilters += listOf("arm64-v8a")
         }

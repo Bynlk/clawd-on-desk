@@ -4,10 +4,13 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.clawd.mobile.ClawdApp
 import com.clawd.mobile.MainActivity
 import com.clawd.mobile.data.PermissionRequestData
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 object NotificationHelper {
 
@@ -19,6 +22,7 @@ object NotificationHelper {
     fun showApprovalNotification(context: Context, request: PermissionRequestData, sessionName: String? = null) {
         val id = notificationId++
         val requestId = request.requestId ?: return
+        Log.d("NotificationHelper", "showApprovalNotification request_id=$requestId tool=${request.toolName}")
 
         // Allow intent
         val allowIntent = Intent(context, ApprovalReceiver::class.java).apply {
@@ -42,10 +46,12 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Open app intent
+        // Open app intent — carry full request data so it survives Activity recreation
+        val requestJson = Json.encodeToString(request)
         val openIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("request_id", requestId)
+            putExtra("request_json", requestJson)
         }
         val openPending = PendingIntent.getActivity(
             context, id, openIntent,
@@ -76,11 +82,14 @@ object NotificationHelper {
     fun showElicitationNotification(context: Context, request: PermissionRequestData, sessionName: String? = null) {
         val id = notificationId++
         val requestId = request.requestId ?: return
+        Log.d("NotificationHelper", "showElicitationNotification request_id=$requestId")
 
         // Open app intent (elicitation requires choosing an option, open the app)
+        val requestJson = Json.encodeToString(request)
         val openIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("request_id", requestId)
+            putExtra("request_json", requestJson)
         }
         val openPending = PendingIntent.getActivity(
             context, id, openIntent,

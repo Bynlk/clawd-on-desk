@@ -3,9 +3,9 @@ package com.clawd.mobile.ui.theme
 import androidx.compose.ui.graphics.Color
 
 // Clawd brand colors — dashboard aligned
-val ClawdAccent = Color(0xFFD97757)          // terracotta
-val ClawdAccentLight = Color(0xFFE8A08C)
-val ClawdAccentDark = Color(0xFFC4684A)
+val ClawdAccent = Color(0xFFB45309)          // amber
+val ClawdAccentLight = Color(0xFFD97706)
+val ClawdAccentDark = Color(0xFF92400E)
 
 // Light mode
 val ClawdBackground = Color(0xFFF5F5F7)
@@ -26,7 +26,7 @@ val ClawdBorderDark = Color(0x12FFFFFF)      // rgba(255,255,255,0.07) mockup
 
 // Status colors — dashboard aligned
 val ClawdError = Color(0xFFEF4444)           // red
-val ClawdBlue = Color(0xFF3B82F6)            // thinking blue
+val ClawdBlue = Color(0xFF6366F1)            // thinking indigo
 
 // Legacy aliases for compatibility
 val ClawdTextPrimary = ClawdTextDark
@@ -39,5 +39,5 @@ val ClawdCardDark = Color(0xFF1A1D26)         // card, bottom nav, action button
 val ClawdCardBorderDark = Color(0x12FFFFFF)   // rgba(255,255,255,0.07) 0.5dp
 val ClawdDividerDark = Color(0xFF2E2E35)      // divider
 val ClawdFaintDark = Color(0xFF52525B)        // meta text, event label
-val ClawdGreenBright = Color(0xFF22C55E)      // connected dot, working badge
+val ClawdGreenBright = Color(0xFF16A34A)      // connected dot, working badge
 val ClawdGreenBorder = Color(0x4D168060)      // rgba(22,128,60,0.3) connection badge border

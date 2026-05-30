@@ -27,11 +27,12 @@ object NotificationIcons {
     }
 
     fun colorForState(state: String): Int = when (state) {
-        "working", "juggling" -> Color.parseColor("#16803C")
-        "thinking" -> Color.parseColor("#3B82F6")
+        "working" -> Color.parseColor("#16A34A")
+        "juggling" -> Color.parseColor("#B45309")
+        "thinking" -> Color.parseColor("#6366F1")
         "attention" -> Color.parseColor("#B45309")
         "error" -> Color.parseColor("#EF4444")
-        "notification" -> Color.parseColor("#D97757")
+        "notification" -> Color.parseColor("#B45309")
         "idle" -> Color.parseColor("#71717A")
         "sleeping" -> Color.parseColor("#A1A1AA")
         else -> Color.parseColor("#71717A")

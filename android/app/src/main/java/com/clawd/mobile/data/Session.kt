@@ -1,19 +1,29 @@
 package com.clawd.mobile.data
 
+import androidx.compose.ui.graphics.Color
 import kotlinx.serialization.Serializable
 
 @Serializable
 data class SessionData(
+    val sessionId: String? = null,
     val state: String = "idle",
     val event: String? = null,
     val agentId: String? = null,
     val toolName: String? = null,
     val sessionTitle: String? = null,
+    val displayTitle: String? = null,
     val cwd: String? = null,
     val updatedAt: Long? = null,
     val recentEvents: List<RecentEvent> = emptyList(),
     val lastOutput: LastOutput? = null,
-    val displayState: String? = null
+    val displayState: String? = null,
+    val isReal: Boolean = true,
+    // Mobile view model — all from desktop, zero inference on Android
+    val badge: String = "idle",
+    val chipText: String? = null,
+    val chipColor: String? = null,
+    val dotColor: String? = null,
+    val isVisible: Boolean = true
 )
 
 @Serializable
@@ -35,19 +45,13 @@ data class Session(
     val data: SessionData
 ) {
     companion object {
-        private val ONESHOT_STATES = setOf("attention", "error", "sweeping", "notification", "carrying")
-
-        val STATE_CONFIG = mapOf(
-            "error" to StateConfig("error", 0xFFEF4444, 0, "错误"),
-            "attention" to StateConfig("attention", 0xFFB45309, 1, "需要关注"),
-            "working" to StateConfig("working", 0xFF16803C, 2, "工作中"),
-            "juggling" to StateConfig("juggling", 0xFF16803C, 2, "多任务"),
-            "thinking" to StateConfig("thinking", 0xFF3B82F6, 3, "思考中"),
-            "notification" to StateConfig("notification", 0xFFD97757, 4, "通知"),
-            "sweeping" to StateConfig("sweeping", 0xFF71717A, 5, "清理中"),
-            "carrying" to StateConfig("carrying", 0xFF71717A, 5, "搬运中"),
-            "idle" to StateConfig("idle", 0xFF71717A, 6, "空闲"),
-            "sleeping" to StateConfig("sleeping", 0xFFA1A1AA, 7, "休眠"),
+        /** Priority for sorting — lower number = higher priority */
+        val STATE_PRIORITY = mapOf(
+            "working" to 2, "juggling" to 2,
+            "thinking" to 3,
+            "notification" to 4, "attention" to 4, "error" to 4,
+            "sweeping" to 5, "carrying" to 5,
+            "idle" to 6, "sleeping" to 7
         )
 
         /** Map event names to user-visible Chinese labels */
@@ -67,37 +71,17 @@ data class Session(
             else -> eventName ?: ""
         }
     }
-
-    /** Effective visual state: prefer displayState (server-resolved) over state (stored persistent). */
-    val effectiveState: String
-        get() = data.displayState ?: data.state
-
-    val stateConfig: StateConfig
-        get() = STATE_CONFIG[effectiveState] ?: STATE_CONFIG["idle"]!!
-
-    /** Derived badge matching PC HUD deriveSessionBadge():
-     *  1. Oneshot states (attention/error/sweeping/notification/carrying) are stored as "idle" on desktop
-     *  2. Non-idle/non-sleeping → running
-     *  3. Idle → check recentEvents: Stop/PostCompact → done, StopFailure/PostToolUseFailure/ApiError → interrupted
-     */
-    val badge: String
-        get() {
-            val s = effectiveState
-            val normalized = if (s in ONESHOT_STATES) "idle" else s
-            if (normalized != "idle" && normalized != "sleeping") return "running"
-            if (normalized == "sleeping") return "idle"
-            val lastEvent = data.recentEvents.lastOrNull()?.event
-            return when (lastEvent) {
-                "StopFailure", "PostToolUseFailure", "ApiError" -> "interrupted"
-                "Stop", "PostCompact", "event_msg:task_complete" -> "done"
-                else -> "idle"
-            }
-        }
 }
 
-data class StateConfig(
-    val iconKey: String,
-    val color: Long,
-    val priority: Int,
-    val label: String
-)
+/** Parse "#RRGGBB" hex color string */
+fun parseHexColor(hex: String?): Color? {
+    if (hex == null || !hex.startsWith("#") || hex.length != 7) return null
+    return try {
+        val r = hex.substring(1, 3).toInt(16)
+        val g = hex.substring(3, 5).toInt(16)
+        val b = hex.substring(5, 7).toInt(16)
+        Color(r, g, b)
+    } catch (_: NumberFormatException) {
+        null
+    }
+}

@@ -32,6 +32,8 @@ data class PermissionSuggestion(
     val label: String,
     val behavior: String,  // "allow" or "deny"
     val rule: String? = null,
+    val type: String? = null,
+    val mode: String? = null,
 )
 
 @Serializable

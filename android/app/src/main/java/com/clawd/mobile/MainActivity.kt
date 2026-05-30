@@ -3,7 +3,10 @@ package com.clawd.mobile
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import android.content.pm.PackageManager
+import com.clawd.mobile.data.PermissionRequestData
+import kotlinx.serialization.json.Json
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -34,6 +37,10 @@ class MainActivity : ComponentActivity() {
     companion object {
         /** Set by notification tap, consumed by NavGraph */
         var pendingApprovalRequestId: String? = null
+        /** Full request data from notification intent, survives Activity recreation */
+        var pendingApprovalRequest: PermissionRequestData? = null
+        /** ViewModel reference for onNewIntent forwarding (set by NavGraph) */
+        var approvalViewModelRef: com.clawd.mobile.ui.approval.ApprovalViewModel? = null
     }
 
     private val permissionQueue = mutableListOf<PermissionRequest>()
@@ -62,6 +69,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        Log.d("MainActivity", "onCreate intent=${intent?.action} extras=${intent?.extras?.keySet()} request_id=${intent?.getStringExtra("request_id")}")
         handleApprovalIntent(intent)
 
         // Build permission queue
@@ -112,12 +120,31 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        Log.d("MainActivity", "onNewIntent action=${intent.action} request_id=${intent.getStringExtra("request_id")}")
         handleApprovalIntent(intent)
+        // Forward directly to ViewModel if available (Activity already composed)
+        pendingApprovalRequest?.let { request ->
+            approvalViewModelRef?.restoreRequestFromNotification(request)
+            pendingApprovalRequest = null
+            pendingApprovalRequestId = null
+        }
     }
 
     private fun handleApprovalIntent(intent: Intent?) {
-        intent?.getStringExtra("request_id")?.let {
+        val rid = intent?.getStringExtra("request_id")
+        val requestJson = intent?.getStringExtra("request_json")
+        Log.d("MainActivity", "handleApprovalIntent request_id=$rid hasJson=${requestJson != null}")
+        rid?.let {
             pendingApprovalRequestId = it
+            Log.d("MainActivity", "pendingApprovalRequestId set to $it")
+        }
+        if (requestJson != null) {
+            try {
+                pendingApprovalRequest = Json.decodeFromString<PermissionRequestData>(requestJson)
+                Log.d("MainActivity", "pendingApprovalRequest restored from JSON")
+            } catch (e: Exception) {
+                Log.w("MainActivity", "Failed to deserialize request_json: ${e.message}")
+            }
         }
     }
 

@@ -1,6 +1,7 @@
 package com.clawd.mobile.ui.approval
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -43,12 +44,36 @@ class ApprovalViewModel(
     val notificationRequestId: StateFlow<String?> = _notificationRequestId
 
     fun setNotificationRequestId(requestId: String) {
+        Log.d("ApprovalViewModel", "setNotificationRequestId=$requestId pending=${_pendingRequests.value.size} dismissed=${recentlyDismissed.containsKey(requestId)}")
+        // Restore dismissed request if user taps notification after it was auto-shown
+        recentlyDismissed.remove(requestId)?.let { dismissed ->
+            if (_pendingRequests.value.none { it.requestId == requestId }) {
+                Log.d("ApprovalViewModel", "Restoring dismissed request $requestId")
+                _pendingRequests.value = _pendingRequests.value + dismissed
+                startCountdown(dismissed)
+            }
+        }
+        _notificationRequestId.value = requestId
+    }
+
+    /** Restore a full request from notification intent extras (survives Activity recreation) */
+    fun restoreRequestFromNotification(request: PermissionRequestData) {
+        val requestId = request.requestId ?: return
+        Log.d("ApprovalViewModel", "restoreRequestFromNotification id=$requestId pending=${_pendingRequests.value.size}")
+        if (_pendingRequests.value.none { it.requestId == requestId }) {
+            Log.d("ApprovalViewModel", "Adding request from notification $requestId")
+            _pendingRequests.value = _pendingRequests.value + request
+            startCountdown(request)
+        }
         _notificationRequestId.value = requestId
     }
 
     fun consumeNotificationRequestId() {
         _notificationRequestId.value = null
     }
+
+    // Save recently dismissed requests so notification tap can restore them
+    private val recentlyDismissed = mutableMapOf<String, PermissionRequestData>()
 
     private val timeoutJobs = mutableMapOf<String, Job>()
     private val countdownJobs = mutableMapOf<String, Job>()
@@ -65,13 +90,14 @@ class ApprovalViewModel(
         if (sessionId == null) return null
         prefsStore.getSessionName(sessionId)?.let { return it }
         webSocket.sessions.value[sessionId]?.let { data ->
-            data.sessionTitle?.let { return it }
+            data.displayTitle?.let { return it }
             data.agentId?.let { return it }
         }
         return sessionId
     }
 
     private fun handleNewRequest(request: PermissionRequestData) {
+        Log.d("ApprovalViewModel", "handleNewRequest id=${request.requestId} tool=${request.toolName} currentPending=${_pendingRequests.value.size}")
         _pendingRequests.value = _pendingRequests.value + request
 
         val context = getApplication<Application>()
@@ -84,6 +110,10 @@ class ApprovalViewModel(
         }
 
         // Start timeout countdown
+        startCountdown(request)
+    }
+
+    private fun startCountdown(request: PermissionRequestData) {
         val requestId = request.requestId ?: return
         val timeoutMs = request.timeout.coerceIn(10_000, 300_000) // 10s to 5min
         val timeoutSec = (timeoutMs / 1000).toInt()
@@ -98,15 +128,19 @@ class ApprovalViewModel(
             _countdowns.value = _countdowns.value - requestId
         }
 
-        // Auto-dismiss on timeout
+        // Auto-dismiss on timeout (saveForRestore=true so notification tap can restore)
         timeoutJobs[requestId]?.cancel()
         timeoutJobs[requestId] = viewModelScope.launch {
             delay(timeoutMs)
-            removeRequest(requestId)
+            removeRequest(requestId, saveForRestore = true)
         }
     }
 
-    private fun removeRequest(requestId: String) {
+    private fun removeRequest(requestId: String, saveForRestore: Boolean = false) {
+        val request = _pendingRequests.value.find { it.requestId == requestId }
+        if (saveForRestore && request != null) {
+            recentlyDismissed[requestId] = request
+        }
         _pendingRequests.value = _pendingRequests.value.filter { it.requestId != requestId }
         _countdowns.value = _countdowns.value - requestId
         timeoutJobs.remove(requestId)?.cancel()
@@ -115,26 +149,26 @@ class ApprovalViewModel(
 
     fun approve(requestId: String) {
         webSocket.sendPermissionResponse(requestId, "allow")
-        removeRequest(requestId)
+        removeRequest(requestId, saveForRestore = false)
     }
 
     fun deny(requestId: String) {
         webSocket.sendPermissionResponse(requestId, "deny")
-        removeRequest(requestId)
+        removeRequest(requestId, saveForRestore = false)
     }
 
     fun approveWithSuggestion(requestId: String, suggestionIndex: Int) {
         webSocket.sendPermissionResponse(requestId, "allow", suggestionIndex)
-        removeRequest(requestId)
+        removeRequest(requestId, saveForRestore = false)
     }
 
     fun submitElicitation(requestId: String, value: String) {
         webSocket.sendElicitationResponse(requestId, mapOf("choice" to value))
-        removeRequest(requestId)
+        removeRequest(requestId, saveForRestore = false)
     }
 
     fun dismissRequest(requestId: String) {
-        removeRequest(requestId)
+        removeRequest(requestId, saveForRestore = true)
     }
 
     override fun onCleared() {

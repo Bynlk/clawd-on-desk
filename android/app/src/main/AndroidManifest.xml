@@ -44,8 +44,9 @@
             android:name=".notification.ApprovalReceiver"
             android:exported="false">
             <intent-filter>
-                <action android:name="ACTION_APPROVE" />
-                <action android:name="ACTION_DENY" />
+                <action android:name="com.clawd.mobile.APPROVE" />
+                <action android:name="com.clawd.mobile.DENY" />
+                <action android:name="com.clawd.mobile.ELICITATION" />
             </intent-filter>
         </receiver>
 
