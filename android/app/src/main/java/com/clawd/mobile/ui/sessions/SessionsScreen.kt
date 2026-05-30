@@ -30,6 +30,7 @@ import com.clawd.mobile.data.PermissionRequestData
 import com.clawd.mobile.data.PrefsStore
 import com.clawd.mobile.data.RecentEvent
 import com.clawd.mobile.data.Session
+import com.clawd.mobile.data.SessionData
 import com.clawd.mobile.ui.approval.ApprovalViewModel
 import com.clawd.mobile.ui.components.ClawdIcons
 import com.clawd.mobile.ui.theme.*
@@ -305,8 +306,8 @@ private fun SectionLabel(title: String, count: Int) {
 
 @Composable
 private fun SessionCard(session: Session, prefsStore: PrefsStore, modifier: Modifier = Modifier) {
-    val config = session.stateConfig
     val data = session.data
+    val badge = session.badge
     var expanded by remember { mutableStateOf(false) }
     val hasEvents = data.recentEvents.isNotEmpty()
 
@@ -320,25 +321,15 @@ private fun SessionCard(session: Session, prefsStore: PrefsStore, modifier: Modi
         ?: data.agentId
         ?: ""
 
-    // Badge style based on state
-    val badgeText = config.label
-    val badgeBg = when (data.state) {
-        "working", "juggling" -> ClawdGreenBright.copy(alpha = 0.18f)
-        "notification" -> ClawdAccent.copy(alpha = 0.15f)
-        "thinking" -> ClawdBlue.copy(alpha = 0.15f)
-        else -> ClawdFaintDark.copy(alpha = 0.12f)
-    }
-    val badgeFg = when (data.state) {
-        "working", "juggling" -> ClawdGreenBright
-        "notification" -> ClawdAccent
-        "thinking" -> ClawdBlue
-        else -> ClawdMutedDark
-    }
-    val badgeBorder = when (data.state) {
-        "working", "juggling" -> ClawdGreenBright.copy(alpha = 0.25f)
-        "notification" -> ClawdAccent.copy(alpha = 0.3f)
-        "thinking" -> ClawdBlue.copy(alpha = 0.3f)
-        else -> ClawdBorderDark
+    // State chip: recentEvent takes priority, then state
+    val chipInfo = deriveChipInfo(data)
+
+    // Status dot color (matching PC HUD badge colors)
+    val dotColor = when (badge) {
+        "running" -> ClawdGreenBright
+        "interrupted" -> Color(0xFFEF4444)
+        "done" -> ClawdMutedDark
+        else -> ClawdFaintDark
     }
 
     Card(
@@ -348,64 +339,58 @@ private fun SessionCard(session: Session, prefsStore: PrefsStore, modifier: Modi
         border = BorderStroke(0.5.dp, ClawdCardBorderDark)
     ) {
         Column(modifier = Modifier.padding(14.dp, 12.dp, 14.dp, 10.dp)) {
-            // Card header: agent-dot + agent name + badge
+            // Header row: [status-dot] [title] [chip] [elapsed] — matches PC HUD
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Agent dot (5dp, accent color)
-                    Box(
-                        modifier = Modifier
-                            .size(5.dp)
-                            .clip(CircleShape)
-                            .background(ClawdAccent)
-                    )
-                    // Agent name
-                    Text(
-                        text = (data.agentId ?: "agent").uppercase(),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = ClawdMuted,
-                        letterSpacing = 0.4.sp,
-                        modifier = Modifier.padding(start = 5.dp)
-                    )
-                }
-                // Badge
-                Text(
-                    text = badgeText,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = badgeFg,
-                    letterSpacing = 0.3.sp,
+                // Status dot (badge-colored, matches PC HUD)
+                Box(
                     modifier = Modifier
-                        .border(0.5.dp, badgeBorder, RoundedCornerShape(5.dp))
-                        .background(badgeBg, RoundedCornerShape(5.dp))
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(dotColor)
                 )
-            }
-
-            // Card title + edit icon
-            Row(
-                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+                // Title
                 Text(
                     text = displayName,
-                    fontSize = 15.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = ClawdTextDark,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
+                    modifier = Modifier
+                        .padding(start = 8.dp)
+                        .weight(1f, fill = false)
                 )
+                // State chip (matches PC HUD state chip)
+                if (chipInfo != null) {
+                    Text(
+                        text = chipInfo.label,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = chipInfo.color,
+                        modifier = Modifier
+                            .padding(start = 6.dp)
+                            .border(0.5.dp, chipInfo.color.copy(alpha = 0.3f), RoundedCornerShape(4.dp))
+                            .background(chipInfo.color.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+                // Elapsed time (matches PC HUD)
+                Text(
+                    text = formatAgo(data.updatedAt),
+                    fontSize = 11.sp,
+                    color = ClawdFaintDark,
+                    modifier = Modifier.padding(start = 6.dp)
+                )
+                // Rename icon
                 Icon(
                     ClawdIcons.Pencil,
                     "重命名",
                     tint = ClawdFaintDark,
                     modifier = Modifier
-                        .padding(start = 6.dp)
+                        .padding(start = 4.dp)
                         .size(13.dp)
                         .clickable { showRenameDialog = true }
                 )
@@ -885,5 +870,29 @@ private fun formatAgo(ts: Long?): String {
         sec < 60 -> "${sec}秒前"
         sec < 3600 -> "${sec / 60}分钟前"
         else -> "${sec / 3600}小时前"
+    }
+}
+
+private data class ChipInfo(val label: String, val color: Color)
+
+/** Derive state chip matching PC HUD: event-based chips take priority, then state-based */
+private fun deriveChipInfo(data: SessionData): ChipInfo? {
+    // Event-based chips (priority unless done/interrupted)
+    val lastEvent = data.recentEvents.lastOrNull()?.event
+    val isTerminal = data.state == "error" || data.state == "attention"
+    if (!isTerminal && lastEvent != null) {
+        when (lastEvent) {
+            "PreCompact", "PreCompress" -> return ChipInfo("清理中", ClawdMutedDark)
+            "PermissionRequest", "Elicitation", "Notification" -> return ChipInfo("等待中", ClawdAccent)
+            "WorktreeCreate" -> return ChipInfo("工作树", ClawdBlue)
+        }
+    }
+    // State-based chips
+    return when (data.state) {
+        "working" -> ChipInfo("工作中", ClawdGreenBright)
+        "juggling" -> ChipInfo("多任务", ClawdAccent)
+        "thinking" -> ChipInfo("思考中", ClawdBlue)
+        "error", "attention" -> ChipInfo("出错", Color(0xFFEF4444))
+        else -> null
     }
 }

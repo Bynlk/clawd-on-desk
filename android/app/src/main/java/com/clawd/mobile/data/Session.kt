@@ -67,6 +67,15 @@ data class Session(
 
     val stateConfig: StateConfig
         get() = STATE_CONFIG[data.state] ?: STATE_CONFIG["idle"]!!
+
+    /** Derived badge matching PC HUD: running / done / interrupted / idle */
+    val badge: String
+        get() = when (data.state) {
+            "working", "juggling", "thinking" -> "running"
+            "error", "attention" -> "interrupted"
+            "sweeping", "carrying", "notification" -> "done"
+            else -> "idle"
+        }
 }
 
 data class StateConfig(
