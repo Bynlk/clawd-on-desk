@@ -35,6 +35,11 @@ class ClawdWebSocket(private val prefsStore: PrefsStore) {
     private val _permissionRequests = MutableSharedFlow<PermissionRequestData>(extraBufferCapacity = 16)
     val permissionRequests: SharedFlow<PermissionRequestData> = _permissionRequests
 
+    private var _serverDisconnect = false
+
+    private val _serverDisconnectEvent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val serverDisconnectEvent: SharedFlow<Unit> = _serverDisconnectEvent
+
     val currentHost: String? get() = config?.host
     val currentPort: Int? get() = config?.port
 
@@ -80,6 +85,10 @@ class ClawdWebSocket(private val prefsStore: PrefsStore) {
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 android.util.Log.w("ClawdWS", "Closed: code=$code reason=$reason")
+                if (_serverDisconnect) {
+                    _serverDisconnect = false
+                    return
+                }
                 scheduleReconnect()
             }
 
@@ -170,6 +179,14 @@ class ClawdWebSocket(private val prefsStore: PrefsStore) {
                         }
                     } catch (_: Exception) {}
                 }
+            }
+            "disconnect" -> {
+                _serverDisconnect = true
+                _connectionState.value = ConnectionState.DISCONNECTED
+                reconnectJob?.cancel()
+                ws?.close(1000, "Server disconnect")
+                ws = null
+                scope.launch { _serverDisconnectEvent.emit(Unit) }
             }
         }
 

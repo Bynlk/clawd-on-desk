@@ -44,7 +44,7 @@ class MobileWSServer extends EventEmitter {
 
     this.clients.add(ws);
     const clientId = crypto.randomBytes(8).toString("hex");
-    const clientIp = req.socket.remoteAddress || "unknown";
+    const clientIp = (req.socket.remoteAddress || "unknown").replace(/^::ffff:/, "");
     const now = Date.now();
     this.clientMeta.set(ws, {
       messageCount: 0,
@@ -216,6 +216,7 @@ class MobileWSServer extends EventEmitter {
     for (const ws of this.clients) {
       const meta = this.clientMeta.get(ws);
       if (meta && meta.clientId === clientId) {
+        try { ws.send(JSON.stringify({ type: "disconnect", timestamp: Date.now() })); } catch {}
         ws.close(1000, "Disconnected by server");
         return true;
       }

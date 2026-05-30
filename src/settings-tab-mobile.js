@@ -26,8 +26,6 @@
     // Section 2: 连接状态
     parent.appendChild(buildStatusSection());
 
-    // Section 3: 设置
-    parent.appendChild(buildSettingsSection());
 
     // 加载 QR 码和状态
     loadQrCode();
@@ -112,36 +110,6 @@
     return helpers.buildSection(t("mobileStatusSection"), rows);
   }
 
-  function buildSettingsSection() {
-    var rows = [];
-
-    // 最大连接数
-    var maxRow = document.createElement("div");
-    maxRow.className = "row";
-    var maxText = document.createElement("div");
-    maxText.className = "row-text";
-    maxText.innerHTML = '<div class="row-label">' + helpers.escapeHtml(t("mobileMaxClients")) + '</div><div class="row-desc">' + helpers.escapeHtml(t("mobileMaxClientsDesc")) + '</div>';
-    var maxControl = document.createElement("div");
-    maxControl.className = "row-control";
-    var maxSlider = document.createElement("input");
-    maxSlider.type = "range";
-    maxSlider.min = "1";
-    maxSlider.max = "10";
-    maxSlider.value = String(state.mobileMaxClients || 10);
-    maxSlider.style.width = "100px";
-    var maxVal = document.createElement("span");
-    maxVal.style.cssText = "font-size:12px;color:var(--text-secondary);margin-left:8px;min-width:20px;text-align:center;";
-    maxVal.textContent = maxSlider.value;
-    maxSlider.addEventListener("input", function() { maxVal.textContent = maxSlider.value; });
-    maxSlider.addEventListener("change", function() { ops.update("mobileMaxClients", parseInt(maxSlider.value, 10)); });
-    maxControl.appendChild(maxSlider);
-    maxControl.appendChild(maxVal);
-    maxRow.appendChild(maxText);
-    maxRow.appendChild(maxControl);
-    rows.push(maxRow);
-
-    return helpers.buildSection(t("mobileSettingsSection"), rows);
-  }
 
   // === QR 码加载 ===
 

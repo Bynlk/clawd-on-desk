@@ -30,8 +30,9 @@ fun ClawdNavGraph() {
 
     // Wait for service to provide WebSocket, fallback to local instance
     var webSocket by remember { mutableStateOf<ClawdWebSocket?>(null) }
+    var wsRefreshKey by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(wsRefreshKey) {
         // Poll for service WebSocket
         repeat(50) { // 5 seconds max
             WebSocketService.getWebSocket()?.let {
@@ -79,6 +80,7 @@ fun ClawdNavGraph() {
                 onBack = { navController.popBackStack() },
                 onScanned = { config ->
                     WebSocketService.start(context, config)
+                    wsRefreshKey++
                     navController.navigate("sessions") {
                         popUpTo("sessions") { inclusive = true }
                     }
@@ -91,6 +93,7 @@ fun ClawdNavGraph() {
                 onBack = { navController.popBackStack() },
                 onConnect = { config ->
                     WebSocketService.start(context, config)
+                    wsRefreshKey++
                     navController.navigate("sessions") {
                         popUpTo("sessions") { inclusive = true }
                     }

@@ -17,6 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -394,6 +397,7 @@ private fun NotifyToggle(
 @Composable
 private fun AboutSection() {
     val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
 
     Text(
         "Clawd Mobile 是 Clawd 桌面宠物的移动端伴侣 App，用于实时监控 PC 端 Claude 会话状态、审批权限请求。",
@@ -402,16 +406,19 @@ private fun AboutSection() {
         modifier = Modifier.padding(bottom = 12.dp)
     )
 
-    AboutRow("版本", "v1.2.1（对应 PC 端 v1.x）")
-    AboutRow("原作者代码仓库", "github.com/clawd-on-desk/clawd-on-desk")
+    AboutRow("版本", "v1.2.3（对应 PC 端 v0.8.1）")
+    AboutRow("原作者代码仓库", "github.com/rullerzhou-afk/clawd-on-desk")
     AboutRow("手机端代码仓库", "github.com/Bynlk/clawd-on-desk")
     AboutRow("开源协议", "AGPL-3.0")
-    AboutRow("原作者", "Clawd Team")
+    AboutRow("原作者", "rullerzhou-afk")
     AboutRow("维护者", "Bynlk")
 
     Spacer(modifier = Modifier.height(12.dp))
     OutlinedButton(
-        onClick = { /* TODO: open GitHub releases page */ },
+        onClick = {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Bynlk/clawd-on-desk/releases/latest"))
+            context.startActivity(intent)
+        },
         border = androidx.compose.foundation.BorderStroke(0.5.dp, ClawdCardBorderDark),
         shape = RoundedCornerShape(10.dp),
         modifier = Modifier.fillMaxWidth()

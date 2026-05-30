@@ -109,7 +109,7 @@ fun SessionsScreen(
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 76.dp),
+                        contentPadding = PaddingValues(bottom = 0.dp),
                         verticalArrangement = Arrangement.spacedBy(0.dp)
                     ) {
                         // Section label
@@ -131,7 +131,7 @@ fun SessionsScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(32.dp)
+                        .height(48.dp)
                         .align(Alignment.BottomCenter)
                         .padding(bottom = 76.dp)
                         .background(
@@ -497,7 +497,7 @@ private fun BottomNav(selectedTab: Int, onTabSelected: (Int) -> Unit, modifier: 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 16.dp)
+            .padding(horizontal = 14.dp, vertical = 16.dp)
             .border(0.5.dp, ClawdCardBorderDark, RoundedCornerShape(14.dp))
             .background(ClawdCardDark.copy(alpha = 0.95f), RoundedCornerShape(14.dp))
             .padding(vertical = 10.dp, horizontal = 8.dp),

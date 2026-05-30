@@ -95,18 +95,27 @@ class WebSocketService : Service() {
     private fun startStateCollector() {
         stateCollectorJob?.cancel()
         stateCollectorJob = scope.launch {
-            webSocket?.connectionState?.collect { state ->
-                val status = when (state) {
-                    ConnectionState.CONNECTED -> "已连接 - ${webSocket?.currentHost ?: ""}"
-                    ConnectionState.CONNECTING -> "连接中..."
-                    ConnectionState.RECONNECTING -> "重新连接中..."
-                    ConnectionState.AUTH_FAILED -> "认证失败"
-                    ConnectionState.DISCONNECTED -> "已断开"
+            launch {
+                webSocket?.connectionState?.collect { state ->
+                    val status = when (state) {
+                        ConnectionState.CONNECTED -> "已连接 - ${webSocket?.currentHost ?: ""}"
+                        ConnectionState.CONNECTING -> "连接中..."
+                        ConnectionState.RECONNECTING -> "重新连接中..."
+                        ConnectionState.AUTH_FAILED -> "认证失败"
+                        ConnectionState.DISCONNECTED -> "已断开"
+                    }
+                    try {
+                        val nm = getSystemService(android.app.NotificationManager::class.java)
+                        nm.notify(NOTIFICATION_ID, buildNotification(status))
+                    } catch (_: Exception) {}
                 }
-                try {
-                    val nm = getSystemService(android.app.NotificationManager::class.java)
-                    nm.notify(NOTIFICATION_ID, buildNotification(status))
-                } catch (_: Exception) {}
+            }
+            launch {
+                webSocket?.serverDisconnectEvent?.collect {
+                    webSocket?.disconnect()
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                }
             }
         }
     }
