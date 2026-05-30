@@ -13,8 +13,8 @@ android {
         applicationId = "com.clawd.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 32
-        versionName = "1.5.3"
+        versionCode = 37
+        versionName = "1.5.8"
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
@@ -73,4 +73,6 @@ dependencies {
     implementation(libs.camera.lifecycle)
     implementation(libs.camera.view)
     implementation(libs.zxing.core)
+
+    testImplementation(libs.junit)
 }
