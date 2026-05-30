@@ -32,11 +32,6 @@
   };
 
   var SETTINGS_SECTIONS = [
-    { key: "connection", label: "连接", fields: [
-      { key: "host", label: "地址", type: "text" },
-      { key: "port", label: "端口", type: "number" },
-      { key: "token", label: "Token", type: "text" },
-    ]},
     { key: "general", label: "通用", fields: [
       { key: "lang", label: "语言" },
       { key: "showTray", label: "显示托盘图标", type: "boolean" },
@@ -64,6 +59,8 @@
   ];
 
   var MAX_HISTORY = 5;
+  var MAX_LOG_LINES = 200;
+  var _logBuffer = [];
 
   // === Utilities ===
 
@@ -97,15 +94,19 @@
   }
 
   function log(msg) {
-    var el = document.getElementById("log-content");
-    if (!el) return;
-    var line = document.createElement("div");
     var now = new Date();
     var ts = [now.getHours(), now.getMinutes(), now.getSeconds()]
       .map(function(n) { return String(n).padStart(2, "0"); }).join(":");
-    line.textContent = "[" + ts + "] " + msg;
-    el.appendChild(line);
-    el.scrollTop = el.scrollHeight;
+    var line = "[" + ts + "] " + msg;
+    _logBuffer.push(line);
+    if (_logBuffer.length > MAX_LOG_LINES) _logBuffer.shift();
+    var el = document.getElementById("settings-log-content");
+    if (el) {
+      var div = document.createElement("div");
+      div.textContent = line;
+      el.appendChild(div);
+      el.scrollTop = el.scrollHeight;
+    }
   }
 
   function showToast(message, type) {
@@ -421,38 +422,23 @@
       // Connection section
       html += '<div class="settings-section">';
       html += '<div class="settings-section-title">连接</div>';
-
-      // Current status
-      html += '<div class="conn-status">';
       var st = connection.state;
       var stCfg = CONNECTION_STATES[st] || CONNECTION_STATES.disconnected;
+      html += '<div class="conn-status">';
       html += '<span class="conn-status-dot ' + stCfg.dot + '"></span>';
       html += '<span class="conn-status-text">' + stCfg.text + '</span>';
       if (connection.config) html += '<span class="conn-status-addr">' + esc(connection.config.host) + ':' + connection.config.port + '</span>';
       html += '</div>';
-
-      // Inputs
       html += '<div class="input-group"><label>地址</label><input id="input-host" type="text" placeholder="192.168.1.10" autocomplete="off" value="' + esc((connection.config && connection.config.host) || "") + '"></div>';
-      html += '<div class="input-group"><label>端口</label><input id="input-port" type="number" placeholder="23334" value="' + esc((connection.config && connection.config.port) || "23334") + '"></div>';
+      html += '<div class="input-group"><label>端口</label><input id="input-port" type="number" placeholder="23334" value="' + esc(String((connection.config && connection.config.port) || "23334")) + '"></div>';
       html += '<div class="input-group"><label>Token</label><input id="input-token" type="text" placeholder="32位token" autocomplete="off" value="' + esc((connection.config && connection.config.token) || "") + '"></div>';
-
-      html += '<div class="btn-group">';
-      html += '<button id="btn-connect" class="primary-btn">连接</button>';
-      html += '<button id="btn-disconnect" class="secondary-btn">断开</button>';
-      html += '</div>';
-
-      // History
+      html += '<div class="btn-group"><button id="btn-connect" class="primary-btn">连接</button><button id="btn-disconnect" class="secondary-btn">断开</button></div>';
       var history = connection.getHistory();
       if (history.length > 0) {
         html += '<div class="history-list">';
         for (var i = 0; i < history.length; i++) {
           var h = history[i];
-          html += '<div class="history-item">';
-          html += '<span class="history-addr">' + esc(h.host) + ':' + h.port + '</span>';
-          html += '<span class="history-time">' + formatAgo(h.timestamp) + '</span>';
-          html += '<button class="history-connect" data-index="' + i + '">连接</button>';
-          html += '<button class="history-delete" data-index="' + i + '">&times;</button>';
-          html += '</div>';
+          html += '<div class="history-item"><span class="history-addr">' + esc(h.host) + ':' + h.port + '</span><span class="history-time">' + formatAgo(h.timestamp) + '</span><button class="history-connect" data-index="' + i + '">连接</button><button class="history-delete" data-index="' + i + '">&times;</button></div>';
         }
         html += '</div>';
       }
@@ -462,31 +448,52 @@
       if (this.pcSettings) {
         for (var si = 0; si < SETTINGS_SECTIONS.length; si++) {
           var section = SETTINGS_SECTIONS[si];
-          html += '<div class="settings-section">';
-          html += '<div class="settings-section-title">' + esc(section.label) + '</div>';
-
+          html += '<div class="settings-section"><div class="settings-section-title">' + esc(section.label) + '</div>';
           if (section.key === "agents" && this.pcSettings.agents) {
-            var agents = this.pcSettings.agents;
-            for (var agentId in agents) {
-              if (!agents.hasOwnProperty(agentId)) continue;
-              var agent = agents[agentId];
-              html += '<div class="settings-row"><span class="settings-label">' + esc(agentId) + '</span>';
-              html += '<span class="settings-value">' + (agent.enabled ? '✓ 启用' : '✗ 禁用') + '</span></div>';
+            for (var agentId in this.pcSettings.agents) {
+              if (!this.pcSettings.agents.hasOwnProperty(agentId)) continue;
+              html += '<div class="settings-row"><span class="settings-label">' + esc(agentId) + '</span><span class="settings-value">' + (this.pcSettings.agents[agentId].enabled ? '✓' : '✗') + '</span></div>';
             }
           } else {
             for (var fi = 0; fi < section.fields.length; fi++) {
               var field = section.fields[fi];
-              if (field.key === "host" || field.key === "port" || field.key === "token") continue; // connection fields shown above
               var val = this.pcSettings[field.key];
-              html += '<div class="settings-row"><span class="settings-label">' + esc(field.label) + '</span>';
-              html += '<span class="settings-value">' + esc(formatSettingsValue(val, field)) + '</span></div>';
+              html += '<div class="settings-row"><span class="settings-label">' + esc(field.label) + '</span><span class="settings-value">' + esc(formatSettingsValue(val, field)) + '</span></div>';
             }
           }
           html += '</div>';
         }
       }
 
+      // Log section
+      html += '<div class="log-section">';
+      html += '<button class="log-toggle" id="btn-toggle-log">日志 (' + _logBuffer.length + ')</button>';
+      html += '<div class="log-body" id="settings-log-content"></div>';
+      html += '</div>';
+
       this.container.innerHTML = html;
+
+      // Render buffered log lines
+      var logEl = document.getElementById("settings-log-content");
+      if (logEl) {
+        for (var li = 0; li < _logBuffer.length; li++) {
+          var div = document.createElement("div");
+          div.textContent = _logBuffer[li];
+          logEl.appendChild(div);
+        }
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      // Bind log toggle
+      var logToggle = document.getElementById("btn-toggle-log");
+      var logBody = document.getElementById("settings-log-content");
+      if (logToggle && logBody) {
+        logToggle.addEventListener("click", function() {
+          logToggle.classList.toggle("open");
+          logBody.classList.toggle("open");
+        });
+      }
+
       this._bindEvents(connection, onConnect, onDisconnect);
     }
 
@@ -526,7 +533,6 @@
         .then(function(data) {
           if (data && data.settings) {
             self.pcSettings = data.settings;
-            // Auto-fill connection fields if empty
             var hostInput = document.getElementById("input-host");
             var portInput = document.getElementById("input-port");
             var tokenInput = document.getElementById("input-token");
@@ -563,17 +569,13 @@
       this._bindNav();
       this._bindConnection();
       this._bindApproval();
-      this._bindLog();
       this.renderer.startStaleCleanup();
 
       if ("serviceWorker" in navigator) navigator.serviceWorker.register("/mobile/sw.js").catch(function() {});
-
-      // Auto-connect
       this._autoConnect();
     }
 
     _autoConnect() {
-      // 1. URL params
       var params = new URLSearchParams(window.location.search);
       var urlHost = params.get("host");
       var urlPort = params.get("port");
@@ -582,27 +584,15 @@
         this.connection.connect({ host: urlHost, port: parseInt(urlPort, 10), token: urlToken });
         return;
       }
-
-      // 2. Last successful connection from history
       var history = this.connection.getHistory();
-      if (history.length > 0) {
-        this.connection.connect(history[0]);
-        return;
-      }
-
-      // 3. Try same host as PWA is served from (bridge server)
+      if (history.length > 0) { this.connection.connect(history[0]); return; }
       var bridgeHost = window.location.hostname;
       var bridgePort = window.location.port;
       if (bridgeHost && bridgePort) {
-        // Fetch token from bridge API
         var self = this;
         fetch("http://" + bridgeHost + ":" + bridgePort + "/api/connection-info")
           .then(function(r) { return r.json(); })
-          .then(function(data) {
-            if (data && data.token) {
-              self.connection.connect({ host: bridgeHost, port: parseInt(bridgePort, 10), token: data.token });
-            }
-          })
+          .then(function(data) { if (data && data.token) self.connection.connect({ host: bridgeHost, port: parseInt(bridgePort, 10), token: data.token }); })
           .catch(function() {});
       }
     }
@@ -610,10 +600,7 @@
     _bindNav() {
       var self = this;
       document.querySelectorAll(".nav-tab").forEach(function(tab) {
-        tab.addEventListener("click", function() {
-          var tabId = this.getAttribute("data-tab");
-          self._switchTab(tabId);
-        });
+        tab.addEventListener("click", function() { self._switchTab(this.getAttribute("data-tab")); });
       });
     }
 
@@ -646,32 +633,15 @@
         if (state === "connected") self.notifier.requestPermission();
         if (self.activeTab === "settings") self._renderSettings();
       };
-      this.connection.onDisconnected = function() {
-        self.approval.pending.clear();
-        self.approval._render();
-      };
+      this.connection.onDisconnected = function() { self.approval.pending.clear(); self.approval._render(); };
       this.connection.onMessage = function(msg) {
-        if (msg.type === "snapshot") {
-          self.renderer.updateFromSnapshot(msg.sessions || {});
-          log("Snapshot: " + Object.keys(msg.sessions || {}).length + " sessions");
-        } else if (msg.type === "state") {
-          self.renderer.updateState(msg.sessionId, msg.data);
-          self.notifier.onStateChange(msg.sessionId, msg.data);
-        } else if (msg.type === "session_deleted") {
-          self.renderer.removeSession(msg.sessionId);
-        } else if (msg.type === "tool_output") {
-          var sid = msg.sessionId;
-          var session = self.renderer.sessions.get(sid);
-          if (session) { session.lastOutput = { toolName: msg.data.toolName, output: (msg.data.output || "").substring(0, 200), at: msg.timestamp || Date.now() }; self.renderer.render(); }
-        } else if (msg.type === "permission_request") {
-          self.approval.showRequest({ type: "permission_request", requestId: msg.requestId, data: msg.data || msg });
-          self.notifier.onApprovalNeeded(msg.data || msg);
-        } else if (msg.type === "elicitation_request") {
-          self.approval.showRequest({ type: "elicitation_request", requestId: msg.requestId, data: msg.data || msg });
-          self.notifier.onApprovalNeeded(msg.data || msg);
-        } else if (msg.type === "permission_dismissed" && msg.requestId) {
-          self.approval.dismiss(msg.requestId);
-        }
+        if (msg.type === "snapshot") { self.renderer.updateFromSnapshot(msg.sessions || {}); log("Snapshot: " + Object.keys(msg.sessions || {}).length + " sessions"); }
+        else if (msg.type === "state") { self.renderer.updateState(msg.sessionId, msg.data); self.notifier.onStateChange(msg.sessionId, msg.data); }
+        else if (msg.type === "session_deleted") { self.renderer.removeSession(msg.sessionId); }
+        else if (msg.type === "tool_output") { var sid = msg.sessionId; var session = self.renderer.sessions.get(sid); if (session) { session.lastOutput = { toolName: msg.data.toolName, output: (msg.data.output || "").substring(0, 200), at: msg.timestamp || Date.now() }; self.renderer.render(); } }
+        else if (msg.type === "permission_request") { self.approval.showRequest({ type: "permission_request", requestId: msg.requestId, data: msg.data || msg }); self.notifier.onApprovalNeeded(msg.data || msg); }
+        else if (msg.type === "elicitation_request") { self.approval.showRequest({ type: "elicitation_request", requestId: msg.requestId, data: msg.data || msg }); self.notifier.onApprovalNeeded(msg.data || msg); }
+        else if (msg.type === "permission_dismissed" && msg.requestId) { self.approval.dismiss(msg.requestId); }
       };
     }
 
@@ -687,12 +657,6 @@
     _bindApproval() {
       var self = this;
       this.approval.onSend = function(response) { self.connection.send(response); log("Sent: " + response.type); };
-    }
-
-    _bindLog() {
-      document.getElementById("btn-toggle-log").addEventListener("click", function() {
-        document.getElementById("log-panel").classList.toggle("collapsed");
-      });
     }
   }
 
