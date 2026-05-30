@@ -80,11 +80,11 @@ fun ClawdNavGraph() {
         ws.reconnect()
     }
 
-    // Monitor displayState changes for notifications (server-computed, no local logic)
+    // Unified notification: triggers on displayState OR sessions change
     val displayState by ws.displayState.collectAsState()
     val sessionsMap by ws.sessions.collectAsState()
-    LaunchedEffect(displayState) {
-        statusNotifier.onDisplayStateChanged(displayState, sessionsMap)
+    LaunchedEffect(displayState, sessionsMap) {
+        statusNotifier.updateNotifications(displayState, sessionsMap)
     }
 
     NavHost(navController = navController, startDestination = "sessions") {

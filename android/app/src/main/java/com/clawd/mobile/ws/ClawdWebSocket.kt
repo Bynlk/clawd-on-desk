@@ -191,8 +191,10 @@ class ClawdWebSocket(private val prefsStore: PrefsStore) {
                     updatedAt = obj["timestamp"]?.jsonPrimitive?.longOrNull,
                     recentEvents = recentEvents,
                     lastOutput = lastOutput,
+                    displayState = obj["displayState"]?.jsonPrimitive?.contentOrNull,
                 )
                 _sessions.value = _sessions.value.toMutableMap().apply { put(sid, data) }
+                Log.d("ClawdWebSocket", "state sid=$sid state=${data.state} displayState=${_displayState.value} lastEvent=${data.recentEvents.lastOrNull()?.event}")
             }
 
             "tool_output" -> {

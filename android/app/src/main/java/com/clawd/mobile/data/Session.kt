@@ -35,6 +35,8 @@ data class Session(
     val data: SessionData
 ) {
     companion object {
+        private val ONESHOT_STATES = setOf("attention", "error", "sweeping", "notification", "carrying")
+
         val STATE_CONFIG = mapOf(
             "error" to StateConfig("error", 0xFFEF4444, 0, "错误"),
             "attention" to StateConfig("attention", 0xFFB45309, 1, "需要关注"),
@@ -58,6 +60,7 @@ data class Session(
             "SessionStart" -> "会话开始"
             "SessionEnd" -> "会话结束"
             "PermissionRequest" -> "需要权限"
+            "Elicitation" -> "需要选择"
             "Notification" -> "通知"
             "SubagentStart" -> "子代理启动"
             "SubagentStop" -> "子代理停止"
@@ -65,16 +68,30 @@ data class Session(
         }
     }
 
-    val stateConfig: StateConfig
-        get() = STATE_CONFIG[data.state] ?: STATE_CONFIG["idle"]!!
+    /** Effective visual state: prefer displayState (server-resolved) over state (stored persistent). */
+    val effectiveState: String
+        get() = data.displayState ?: data.state
 
-    /** Derived badge matching PC HUD: running / done / interrupted / idle */
+    val stateConfig: StateConfig
+        get() = STATE_CONFIG[effectiveState] ?: STATE_CONFIG["idle"]!!
+
+    /** Derived badge matching PC HUD deriveSessionBadge():
+     *  1. Oneshot states (attention/error/sweeping/notification/carrying) are stored as "idle" on desktop
+     *  2. Non-idle/non-sleeping → running
+     *  3. Idle → check recentEvents: Stop/PostCompact → done, StopFailure/PostToolUseFailure/ApiError → interrupted
+     */
     val badge: String
-        get() = when (data.state) {
-            "working", "juggling", "thinking" -> "running"
-            "error", "attention" -> "interrupted"
-            "sweeping", "carrying", "notification" -> "done"
-            else -> "idle"
+        get() {
+            val s = effectiveState
+            val normalized = if (s in ONESHOT_STATES) "idle" else s
+            if (normalized != "idle" && normalized != "sleeping") return "running"
+            if (normalized == "sleeping") return "idle"
+            val lastEvent = data.recentEvents.lastOrNull()?.event
+            return when (lastEvent) {
+                "StopFailure", "PostToolUseFailure", "ApiError" -> "interrupted"
+                "Stop", "PostCompact", "event_msg:task_complete" -> "done"
+                else -> "idle"
+            }
         }
 }
 

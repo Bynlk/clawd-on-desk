@@ -23,7 +23,7 @@ data class PermissionRequestData(
     val sessionId: String? = null,
     val suggestions: List<PermissionSuggestion> = emptyList(),
     val elicitationOptions: List<ElicitationOption> = emptyList(),
-    val timeout: Long = 90000,
+    val timeout: Long = 60000,
     val requestId: String? = null,
 )
 

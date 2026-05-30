@@ -69,7 +69,7 @@ fun SessionsScreen(
 
     val sessions = remember(sessionsMap) {
         sessionsMap.map { (id, data) -> Session(id, data) }
-            .filter { it.data.state !in listOf("sleeping", "sweeping") }
+            .filter { it.effectiveState !in listOf("sleeping", "sweeping") }
             .sortedWith(compareBy<Session> { it.stateConfig.priority.toLong() }
                 .thenByDescending { it.data.updatedAt ?: 0L })
     }
@@ -875,24 +875,44 @@ private fun formatAgo(ts: Long?): String {
 
 private data class ChipInfo(val label: String, val color: Color)
 
-/** Derive state chip matching PC HUD: event-based chips take priority, then state-based */
+private val ONESHOT_STATES = setOf("attention", "error", "sweeping", "notification", "carrying")
+
+/** Derive state chip matching PC HUD stateChipInfo():
+ *  Uses displayState (server-resolved visual state) with fallback to state.
+ *  Oneshot states in displayState are normalized to "idle" for chip logic.
+ */
 private fun deriveChipInfo(data: SessionData): ChipInfo? {
-    // Event-based chips (priority unless done/interrupted)
+    val visual = data.displayState ?: data.state
+    val effectiveState = if (visual in ONESHOT_STATES) "idle" else visual
     val lastEvent = data.recentEvents.lastOrNull()?.event
-    val isTerminal = data.state == "error" || data.state == "attention"
-    if (!isTerminal && lastEvent != null) {
+
+    // Effective idle → check lastEvent for done/interrupted chip
+    if (effectiveState == "idle") {
+        return when (lastEvent) {
+            "StopFailure", "PostToolUseFailure", "ApiError" -> ChipInfo("出错", Color(0xFFEF4444))
+            "Stop", "PostCompact", "event_msg:task_complete" -> null // done = no chip
+            else -> null
+        }
+    }
+
+    // Active state → event-based chips take priority
+    if (lastEvent != null) {
         when (lastEvent) {
             "PreCompact", "PreCompress" -> return ChipInfo("清理中", ClawdMutedDark)
             "PermissionRequest", "Elicitation", "Notification" -> return ChipInfo("等待中", ClawdAccent)
             "WorktreeCreate" -> return ChipInfo("工作树", ClawdBlue)
         }
     }
-    // State-based chips
-    return when (data.state) {
+
+    // State-based chips (use visual state for correct label)
+    return when (visual) {
         "working" -> ChipInfo("工作中", ClawdGreenBright)
         "juggling" -> ChipInfo("多任务", ClawdAccent)
         "thinking" -> ChipInfo("思考中", ClawdBlue)
-        "error", "attention" -> ChipInfo("出错", Color(0xFFEF4444))
+        "notification" -> ChipInfo("通知", ClawdAccent)
+        "attention" -> ChipInfo("需要关注", Color(0xFFB45309))
+        "error" -> ChipInfo("错误", Color(0xFFEF4444))
+        "sweeping" -> ChipInfo("清理中", ClawdMutedDark)
         else -> null
     }
 }
