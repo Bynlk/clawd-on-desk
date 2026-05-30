@@ -232,6 +232,7 @@
       this.reconnectDelay = 1000; this.maxReconnectDelay = 30000;
       this.reconnectTimer = null; this.state = "disconnected";
       this.retryCount = 0; this.maxRetries = 10;
+      this._closingIntentionally = false;
       this.onStateChange = null; this.onMessage = null; this.onDisconnected = null;
     }
 
@@ -239,13 +240,18 @@
       this.config = config;
       this.retryCount = 0;
       this.reconnectDelay = 1000;
+      clearTimeout(this.reconnectTimer);
       this._saveToHistory(config);
       this._doConnect();
     }
 
     _doConnect() {
       if (!this.config) return;
-      if (this.ws) { try { this.ws.close(); } catch {} }
+      if (this.ws) {
+        this._closingIntentionally = true;
+        try { this.ws.close(); } catch {}
+        this._closingIntentionally = false;
+      }
       var url = "ws://" + this.config.host + ":" + this.config.port + "/ws?token=" + this.config.token;
       this._setState("connecting");
       log("Connecting to " + this.config.host + ":" + this.config.port + "...");
@@ -255,6 +261,7 @@
       this.ws.onopen = function() { connected = true; self.retryCount = 0; self.reconnectDelay = 1000; self._setState("connected"); log("Connected"); showToast("已连接到桌面端", "success"); };
       this.ws.onmessage = function(event) { try { var msg = JSON.parse(event.data); if (self.onMessage) self.onMessage(msg); } catch {} };
       this.ws.onclose = function(event) {
+        if (self._closingIntentionally) return;
         if (event.code === 1008) { self._setState("auth_failed"); log("Auth failed"); showToast("认证失败", "error"); return; }
         if (connected) log("Disconnected (code: " + event.code + ")");
         if (self.onDisconnected) self.onDisconnected();
