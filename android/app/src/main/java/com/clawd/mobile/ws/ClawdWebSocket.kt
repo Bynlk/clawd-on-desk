@@ -10,6 +10,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
+import android.util.Log
 import java.util.concurrent.TimeUnit
 
 class ClawdWebSocket(private val prefsStore: PrefsStore) {
@@ -44,6 +45,9 @@ class ClawdWebSocket(private val prefsStore: PrefsStore) {
 
     private val _syncing = MutableStateFlow(false)
     val syncing: StateFlow<Boolean> = _syncing
+
+    private val _displayState = MutableStateFlow("idle")
+    val displayState: StateFlow<String> = _displayState
 
     val currentHost: String? get() = config?.host
     val currentPort: Int? get() = config?.port
@@ -93,6 +97,7 @@ class ClawdWebSocket(private val prefsStore: PrefsStore) {
 
         eventSource = sseFactory.newEventSource(request, object : EventSourceListener() {
             override fun onOpen(eventSource: EventSource, response: Response) {
+                Log.d("ClawdWebSocket", "SSE connected")
                 reconnectJob?.cancel()
                 reconnectDelay = 1000L
                 _connectionState.value = ConnectionState.CONNECTED
@@ -121,23 +126,35 @@ class ClawdWebSocket(private val prefsStore: PrefsStore) {
     private fun handleMessage(rawText: String) {
         val obj = try { json.decodeFromString<JsonObject>(rawText) } catch (_: Exception) { return }
         val type = obj["type"]?.jsonPrimitive?.contentOrNull ?: return
+        Log.d("ClawdWebSocket", "SSE message type=$type")
 
         when (type) {
             "ping" -> return  // server heartbeat, watchdog already reset in onEvent
             "connected" -> { /* SSE handshake confirmed */ }
             "clear_sessions" -> {
+                Log.d("ClawdWebSocket", "clear_sessions → syncing=true, sessions cleared")
                 _sessions.value = emptyMap()
                 _syncing.value = true
             }
 
             "snapshot" -> {
-                val sessionsObj = obj["sessions"]?.jsonObject ?: return
+                val sessionsObj = obj["sessions"]?.jsonObject
+                if (sessionsObj == null) {
+                    Log.d("ClawdWebSocket", "snapshot (no sessions field) → syncing=false")
+                    _syncing.value = false
+                    _sessions.value = emptyMap()
+                    return
+                }
                 val map = mutableMapOf<String, SessionData>()
                 for ((sid, el) in sessionsObj) {
                     try { map[sid] = json.decodeFromJsonElement<SessionData>(el) } catch (_: Exception) {}
                 }
-                _sessions.value = map
+                obj["displayState"]?.jsonPrimitive?.contentOrNull?.let {
+                    _displayState.value = it
+                }
+                Log.d("ClawdWebSocket", "snapshot (${map.size} sessions, displayState=${_displayState.value}) → syncing=false")
                 _syncing.value = false
+                _sessions.value = map
             }
 
             "state" -> {
@@ -161,6 +178,9 @@ class ClawdWebSocket(private val prefsStore: PrefsStore) {
                         )
                     }
                 } catch (_: Exception) { null }
+                obj["displayState"]?.jsonPrimitive?.contentOrNull?.let {
+                    _displayState.value = it
+                }
                 val data = SessionData(
                     state = obj["state"]?.jsonPrimitive?.contentOrNull ?: "idle",
                     event = obj["event"]?.jsonPrimitive?.contentOrNull,
@@ -196,6 +216,8 @@ class ClawdWebSocket(private val prefsStore: PrefsStore) {
             "permission_request" -> {
                 scope.launch {
                     try {
+                        val reqId = obj["id"]?.jsonPrimitive?.contentOrNull
+                        Log.d("ClawdWebSocket", "permission_request id=$reqId")
                         val toolNameStr = obj["toolName"]?.jsonPrimitive?.contentOrNull
                         val toolInputObj = obj["toolInput"]?.jsonObject
                         val suggestions = try {

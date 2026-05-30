@@ -12,7 +12,8 @@ data class SessionData(
     val cwd: String? = null,
     val updatedAt: Long? = null,
     val recentEvents: List<RecentEvent> = emptyList(),
-    val lastOutput: LastOutput? = null
+    val lastOutput: LastOutput? = null,
+    val displayState: String? = null
 )
 
 @Serializable
