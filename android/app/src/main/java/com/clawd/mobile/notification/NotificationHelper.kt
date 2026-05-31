@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.clawd.mobile.ClawdApp
 import com.clawd.mobile.MainActivity
+import com.clawd.mobile.R
 import com.clawd.mobile.data.PermissionRequestData
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -59,8 +60,8 @@ object NotificationHelper {
         )
 
         val name = sessionName ?: request.agentId ?: "Agent"
-        val title = "🦀 $name 需要你来拍板！"
-        val body = request.toolInputSummary ?: "需要您的确认"
+        val title = context.getString(R.string.notify_permission_title, name)
+        val body = request.toolInputSummary ?: context.getString(R.string.notify_permission_body)
 
         val notification = NotificationCompat.Builder(context, ClawdApp.CHANNEL_APPROVAL)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
@@ -70,8 +71,8 @@ object NotificationHelper {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(openPending)
-            .addAction(android.R.drawable.ic_menu_save, "允许", allowPending)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "拒绝", denyPending)
+            .addAction(android.R.drawable.ic_menu_save, context.getString(R.string.action_allow), allowPending)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, context.getString(R.string.action_deny), denyPending)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .build()
 
@@ -97,8 +98,8 @@ object NotificationHelper {
         )
 
         val name = sessionName ?: request.agentId ?: "Agent"
-        val title = "🦀 $name 需要你做选择"
-        val body = request.toolInputSummary ?: "请选择一个选项"
+        val title = context.getString(R.string.notify_elicitation_title, name)
+        val body = request.toolInputSummary ?: context.getString(R.string.notify_elicitation_body)
 
         val notification = NotificationCompat.Builder(context, ClawdApp.CHANNEL_APPROVAL)
             .setSmallIcon(android.R.drawable.ic_dialog_info)

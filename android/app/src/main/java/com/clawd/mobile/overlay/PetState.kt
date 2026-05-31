@@ -9,11 +9,15 @@ package com.clawd.mobile.overlay
  */
 sealed class PetState(val priority: Int, val themeKey: String) {
 
-    /** Check whether this state should trigger the idle animation cycle. */
-    val isIdleLike: Boolean get() = this is Idle || this is Sleeping
+    /** True for states that are functionally idle (Idle, Sleeping, sleep-sequence). */
+    val isIdleLike: Boolean
+        get() = this is Idle || this is Sleeping || this is Yawning || this is Dozing || this is Collapsing
 
-    /** Non-idle, non-sleeping state suitable for lastNonIdleState tracking. */
-    val isActive: Boolean get() = !isIdleLike
+    /** True for states representing active work (not idle-like, not Waking). */
+    val isActive: Boolean get() = !isIdleLike && this !is Waking
+
+    /** True if this state is part of the sleep sequence. */
+    val isSleepSequence: Boolean get() = this in SLEEP_SEQUENCE
 
     // --- Concrete states (PC-aligned priority) ---
 
@@ -21,11 +25,17 @@ sealed class PetState(val priority: Int, val themeKey: String) {
     data object Notification: PetState(7, "notification")
     data object Sweeping    : PetState(6, "sweeping")
     data object Attention   : PetState(5, "attention")
+    data object Conducting  : PetState(4, "conducting")
     data object Juggling    : PetState(4, "juggling")
     data object Carrying    : PetState(4, "carrying")
+    data object Debugger    : PetState(4, "debugger")
     data object Working     : PetState(3, "working")
     data object Thinking    : PetState(2, "thinking")
     data object Idle        : PetState(1, "idle")
+    data object Yawning     : PetState(1, "yawning")
+    data object Dozing      : PetState(1, "dozing")
+    data object Collapsing  : PetState(1, "collapsing")
+    data object Waking      : PetState(1, "waking")
     data object Sleeping    : PetState(0, "sleeping")
 
     companion object {
@@ -33,8 +43,20 @@ sealed class PetState(val priority: Int, val themeKey: String) {
         /** All known states, ordered by descending priority. */
         val ALL: List<PetState> = listOf(
             Error, Notification, Sweeping, Attention,
-            Juggling, Carrying, Working, Thinking,
-            Idle, Sleeping
+            Conducting, Juggling, Carrying, Debugger,
+            Working, Thinking,
+            Idle, Yawning, Dozing, Collapsing, Waking,
+            Sleeping
+        )
+
+        /** States that form the sleep animation sequence. */
+        val SLEEP_SEQUENCE: Set<PetState> = setOf(
+            Yawning, Dozing, Collapsing, Sleeping, Waking
+        )
+
+        /** States that fire once then auto-return to previous state. */
+        val ONESHOT_STATES: Set<PetState> = setOf(
+            Attention, Error, Sweeping, Notification, Carrying
         )
 
         /** Badge strings considered "running" (task in progress). */
@@ -48,10 +70,16 @@ sealed class PetState(val priority: Int, val themeKey: String) {
             "notification" -> Notification
             "sweeping"     -> Sweeping
             "attention"    -> Attention
+            "conducting"   -> Conducting
             "juggling"     -> Juggling
             "carrying"     -> Carrying
+            "debugger"     -> Debugger
             "working"      -> Working
             "thinking"     -> Thinking
+            "yawning"      -> Yawning
+            "dozing"       -> Dozing
+            "collapsing"   -> Collapsing
+            "waking"       -> Waking
             "sleeping"     -> Sleeping
             else           -> Idle
         }

@@ -9,6 +9,7 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import com.clawd.mobile.R
 import com.clawd.mobile.data.SessionData
 
 /**
@@ -57,7 +58,7 @@ class PetBubbleView(context: Context) : LinearLayout(context) {
 
         // "进入 App" button
         val btn = TextView(context).apply {
-            text = "进入 App"
+            text = context.getString(R.string.pet_bubble_enter_app)
             setTextColor(Color.parseColor("#FFE0E0E0"))
             textSize = 14f
             gravity = Gravity.CENTER
@@ -86,12 +87,12 @@ class PetBubbleView(context: Context) : LinearLayout(context) {
 
     fun showNotConnected() {
         containerLayout.removeAllViews()
-        containerLayout.addView(buildSingleLine("未连接"))
+        containerLayout.addView(buildSingleLine(context.getString(R.string.status_not_connected)))
     }
 
     fun showNoSessions() {
         containerLayout.removeAllViews()
-        containerLayout.addView(buildSingleLine("暂无活跃会话"))
+        containerLayout.addView(buildSingleLine(context.getString(R.string.pet_bubble_no_sessions)))
     }
 
     private fun buildSingleLine(text: String): TextView {

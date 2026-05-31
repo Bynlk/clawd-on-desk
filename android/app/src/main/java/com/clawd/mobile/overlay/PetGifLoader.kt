@@ -32,6 +32,11 @@ object PetGifLoader {
         return resolveGif(character, displayState, sessionCount)
     }
 
+    /** Type-safe overload accepting a [PetState] directly. */
+    fun getGifResId(state: PetState, sessionCount: Int, character: String = "clawd"): Int? {
+        return resolveGif(character, state.themeKey, sessionCount)
+    }
+
     /** 返回 reading GIF 的 resId，如果角色没有则返回 null */
     fun getReadingGifResId(character: String = "clawd"): Int? {
         return resolveGif(character, "idle_reading", 0)
@@ -53,11 +58,29 @@ object PetGifLoader {
                 else -> listOf("${character}_headphones_groove", "${character}_typing", "${character}_idle")
             }
             "attention" -> listOf("${character}_attention", "${character}_happy", "${character}_idle")
+            // Sleep sequence: fallback to sleeping GIF if specific animation missing
+            "yawning" -> listOf("${character}_yawning", "${character}_sleeping", "${character}_idle")
+            "dozing" -> listOf("${character}_dozing", "${character}_sleeping", "${character}_idle")
+            "collapsing" -> listOf("${character}_collapsing", "${character}_sleeping", "${character}_idle")
+            "waking" -> listOf("${character}_waking", "${character}_idle")
+            // Conducting & debugger: character-specific, fallback to idle
+            "conducting" -> listOf("${character}_conducting", "${character}_idle")
+            "debugger" -> listOf("${character}_debugger", "${character}_idle")
             else -> listOf("${character}_${state}", "${character}_idle")
         }
         return candidates.firstNotNullOfOrNull { name ->
             resIdByName(name).takeIf { it != 0 }
         }
+    }
+
+    /**
+     * Check whether [state] has a dedicated GIF for [character] (not a fallback).
+     * Used by PetStateManager to decide whether to play sleep/wake animations.
+     */
+    fun hasGifForState(state: PetState, character: String): Boolean {
+        val primaryName = "${character}_${state.themeKey}"
+        val id = resIdByName(primaryName)
+        return id != null && id != 0
     }
 
     /**
@@ -73,7 +96,8 @@ object PetGifLoader {
         return try {
             val field = R.raw::class.java.getField(name)
             field.getInt(null)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w(TAG, "resIdByName: reflection fallback failed for '$name'", e)
             null
         }
     }

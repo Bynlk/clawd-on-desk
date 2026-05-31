@@ -71,7 +71,7 @@ class WebSocketService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_CONNECT -> {
-                startForeground(NOTIFICATION_ID, buildNotification("连接中..."))
+                startForeground(NOTIFICATION_ID, buildNotification(getString(R.string.status_connecting)))
                 acquireLocks()
                 val host = intent.getStringExtra("host")
                 val port = intent.getIntExtra("port", 0)
@@ -91,7 +91,7 @@ class WebSocketService : Service() {
             }
             else -> {
                 // Service restarted by system
-                startForeground(NOTIFICATION_ID, buildNotification("已断开"))
+                startForeground(NOTIFICATION_ID, buildNotification(getString(R.string.status_disconnected)))
                 acquireLocks()
                 webSocket?.reconnect()
                 startStateCollector()
@@ -106,11 +106,11 @@ class WebSocketService : Service() {
         stateCollectorJob = scope.launch {
             webSocket?.connectionState?.collect { state ->
                 val status = when (state) {
-                    ConnectionState.CONNECTED -> "已连接 - ${webSocket?.currentHost ?: ""}"
-                    ConnectionState.CONNECTING -> "连接中..."
-                    ConnectionState.RECONNECTING -> "重新连接中..."
-                    ConnectionState.AUTH_FAILED -> "认证失败"
-                    ConnectionState.DISCONNECTED -> "已断开"
+                    ConnectionState.CONNECTED -> getString(R.string.status_connected_to, webSocket?.currentHost ?: "")
+                    ConnectionState.CONNECTING -> getString(R.string.status_connecting)
+                    ConnectionState.RECONNECTING -> getString(R.string.status_reconnecting)
+                    ConnectionState.AUTH_FAILED -> getString(R.string.status_auth_failed)
+                    ConnectionState.DISCONNECTED -> getString(R.string.status_disconnected)
                 }
                 try {
                     val nm = getSystemService(android.app.NotificationManager::class.java)
@@ -127,8 +127,8 @@ class WebSocketService : Service() {
                         )
                         val alert = NotificationCompat.Builder(this@WebSocketService, NotificationHelper.CHANNEL_ALERT)
                             .setSmallIcon(android.R.drawable.ic_dialog_info)
-                            .setContentTitle("😴 和桌面端失联了")
-                            .setContentText("检查一下网络？")
+                            .setContentTitle(getString(R.string.alert_disconnect_title))
+                            .setContentText(getString(R.string.alert_disconnect_text))
                             .setPriority(NotificationCompat.PRIORITY_HIGH)
                             .setAutoCancel(true)
                             .setContentIntent(alertPending)
@@ -142,8 +142,8 @@ class WebSocketService : Service() {
                         )
                         val alert = NotificationCompat.Builder(this@WebSocketService, NotificationHelper.CHANNEL_ALERT)
                             .setSmallIcon(android.R.drawable.ic_dialog_info)
-                            .setContentTitle("✅ 重新连上啦")
-                            .setContentText("继续摸鱼！")
+                            .setContentTitle(getString(R.string.alert_reconnect_title))
+                            .setContentText(getString(R.string.alert_reconnect_text))
                             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                             .setAutoCancel(true)
                             .setContentIntent(alertPending)

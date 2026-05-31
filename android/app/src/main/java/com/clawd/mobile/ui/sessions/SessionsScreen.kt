@@ -18,6 +18,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -25,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import android.util.Log
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.clawd.mobile.R
 import com.clawd.mobile.data.PermissionRequestData
 import com.clawd.mobile.data.PrefsStore
 import com.clawd.mobile.data.RecentEvent
@@ -126,7 +129,7 @@ fun SessionsScreen(
                             strokeWidth = 3.dp
                         )
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text("正在同步...", fontSize = 14.sp, color = ClawdFaintDark)
+                        Text(stringResource(R.string.status_syncing), fontSize = 14.sp, color = ClawdFaintDark)
                     }
                 }
             } else if (connectionState == ConnectionState.DISCONNECTED && sessions.isEmpty()) {
@@ -138,7 +141,7 @@ fun SessionsScreen(
                 }
             } else {
                 Column(modifier = Modifier.weight(1f)) {
-                    SectionLabel(title = "活跃会话", count = sessions.size)
+                    SectionLabel(title = stringResource(R.string.sessions_active_title), count = sessions.size)
 
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
@@ -180,12 +183,12 @@ fun SessionsScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(ClawdIcons.DeviceDesktop, null, tint = ClawdAccent, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("设备", color = ClawdTextDark)
+                        Text(stringResource(R.string.sessions_tab_devices), color = ClawdTextDark)
                     }
                 },
                 text = {
                     Text(
-                        "未来中继服务，敬请期待。\n\n中继服务将支持通过云端中继连接 PC 端，无需处于同一局域网。",
+                        stringResource(R.string.sessions_relay_title),
                         fontSize = 13.sp,
                         color = ClawdFaintDark
                     )
@@ -195,7 +198,7 @@ fun SessionsScreen(
                         showDevicesPlaceholder = false
                         selectedTab = 0
                     }) {
-                        Text("知道了", color = ClawdAccent)
+                        Text(stringResource(R.string.sessions_relay_ok), color = ClawdAccent)
                     }
                 }
             )
@@ -261,7 +264,7 @@ private fun FixedTopBar(isConnected: Boolean) {
                 .background(if (isConnected) ClawdGreenBright else ClawdFaintDark)
         )
         Text(
-            text = if (isConnected) "已连接" else "未连接",
+            text = if (isConnected) stringResource(R.string.status_connected) else stringResource(R.string.status_not_connected),
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
             color = if (isConnected) ClawdGreenBright else ClawdFaintDark,
@@ -291,6 +294,7 @@ private fun SectionLabel(title: String, count: Int) {
 
 @Composable
 private fun SessionCard(session: Session, prefsStore: PrefsStore, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
     val data = session.data
     var expanded by remember { mutableStateOf(false) }
     val hasEvents = data.recentEvents.isNotEmpty()
@@ -320,8 +324,8 @@ private fun SessionCard(session: Session, prefsStore: PrefsStore, modifier: Modi
     // Mobile override: chip text (more descriptive labels)
     val mappedChipText = when (data.chipText) {
         "等待中" -> when (data.event) {
-            "PermissionRequest" -> "等待授权"
-            "Elicitation" -> "等待选择"
+            "PermissionRequest" -> context.getString(R.string.sessions_waiting_auth)
+            "Elicitation" -> context.getString(R.string.sessions_waiting_choice)
             else -> chipText
         }
         else -> chipText
@@ -377,7 +381,7 @@ private fun SessionCard(session: Session, prefsStore: PrefsStore, modifier: Modi
                 }
                 // Elapsed time (matches PC HUD)
                 Text(
-                    text = formatAgo(data.updatedAt),
+                    text = formatAgo(data.updatedAt, LocalContext.current),
                     fontSize = 11.sp,
                     color = ClawdFaintDark,
                     modifier = Modifier.padding(start = 6.dp)
@@ -385,7 +389,7 @@ private fun SessionCard(session: Session, prefsStore: PrefsStore, modifier: Modi
                 // Rename icon
                 Icon(
                     ClawdIcons.Pencil,
-                    "重命名",
+                    stringResource(R.string.sessions_rename),
                     tint = ClawdFaintDark,
                     modifier = Modifier
                         .padding(start = 4.dp)
@@ -400,7 +404,7 @@ private fun SessionCard(session: Session, prefsStore: PrefsStore, modifier: Modi
                 AlertDialog(
                     onDismissRequest = { showRenameDialog = false },
                     containerColor = ClawdCardDark,
-                    title = { Text("重命名会话", color = ClawdTextDark) },
+                    title = { Text(stringResource(R.string.sessions_rename_title), color = ClawdTextDark) },
                     text = {
                         OutlinedTextField(
                             value = editName,
@@ -427,12 +431,12 @@ private fun SessionCard(session: Session, prefsStore: PrefsStore, modifier: Modi
                             }
                             showRenameDialog = false
                         }) {
-                            Text("保存", color = ClawdAccent)
+                            Text(stringResource(R.string.sessions_save), color = ClawdAccent)
                         }
                     },
                     dismissButton = {
                         TextButton(onClick = { showRenameDialog = false }) {
-                            Text("取消", color = ClawdMutedDark)
+                            Text(stringResource(R.string.sessions_cancel), color = ClawdMutedDark)
                         }
                     }
                 )
@@ -504,7 +508,7 @@ private fun SessionCard(session: Session, prefsStore: PrefsStore, modifier: Modi
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Icon(ClawdIcons.Activity, null, tint = ClawdFaintDark, modifier = Modifier.size(12.dp))
-                    Text("最近事件", fontSize = 11.sp, color = ClawdFaintDark)
+                    Text(stringResource(R.string.sessions_recent_events), fontSize = 11.sp, color = ClawdFaintDark)
                     if (hasEvents) {
                         Text(
                             text = "${data.recentEvents.size}",
@@ -575,13 +579,13 @@ private fun EventTimeline(events: List<RecentEvent>) {
                         .background(eventColor)
                 )
                 Text(
-                    Session.eventLabel(event.event),
+                    Session.eventLabel(event.event, LocalContext.current),
                     fontSize = 11.sp,
                     color = ClawdFaintDark,
                     modifier = Modifier.weight(1f)
                 )
                 Text(
-                    formatAgo(event.at),
+                    formatAgo(event.at, LocalContext.current),
                     fontSize = 11.sp,
                     color = ClawdFaintDark
                 )
@@ -595,9 +599,9 @@ private fun EventTimeline(events: List<RecentEvent>) {
 @Composable
 private fun BottomNav(selectedTab: Int, onTabSelected: (Int) -> Unit, modifier: Modifier = Modifier) {
     val tabs = listOf(
-        Triple(ClawdIcons.LayoutList, "会话", 0),
-        Triple(ClawdIcons.DeviceDesktop, "设备", 1),
-        Triple(ClawdIcons.Settings, "设置", 2)
+        Triple(ClawdIcons.LayoutList, stringResource(R.string.sessions_tab_sessions), 0),
+        Triple(ClawdIcons.DeviceDesktop, stringResource(R.string.sessions_tab_devices), 1),
+        Triple(ClawdIcons.Settings, stringResource(R.string.sessions_tab_settings), 2)
     )
 
     Row(
@@ -695,7 +699,7 @@ private fun ApprovalSheet(
             )
             Spacer(modifier = Modifier.weight(1f))
             Text(
-                if (isElicitation) "选择" else "权限",
+                if (isElicitation) stringResource(R.string.sessions_action_choice) else stringResource(R.string.sessions_action_permission),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = ClawdAccentLight
@@ -812,7 +816,7 @@ private fun ApprovalSheet(
                     ),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("拒绝", modifier = Modifier.padding(vertical = 4.dp))
+                    Text(stringResource(R.string.action_deny), modifier = Modifier.padding(vertical = 4.dp))
                 }
                 Button(
                     onClick = { onApprove(requestId) },
@@ -823,7 +827,7 @@ private fun ApprovalSheet(
                     ),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("允许", modifier = Modifier.padding(vertical = 4.dp))
+                    Text(stringResource(R.string.action_allow), modifier = Modifier.padding(vertical = 4.dp))
                 }
             }
         }
@@ -847,9 +851,9 @@ private fun EmptyState(onScan: () -> Unit, onManual: () -> Unit) {
                 tint = ClawdFaintDark
             )
             Spacer(modifier = Modifier.height(16.dp))
-            Text("扫码配对开始监控", fontSize = 15.sp, color = ClawdMutedDark)
+            Text(stringResource(R.string.sessions_empty_title), fontSize = 15.sp, color = ClawdMutedDark)
             Spacer(modifier = Modifier.height(8.dp))
-            Text("前往「设置」扫码或手动连接", fontSize = 12.sp, color = ClawdFaintDark)
+            Text(stringResource(R.string.sessions_empty_subtitle), fontSize = 12.sp, color = ClawdFaintDark)
             Spacer(modifier = Modifier.height(24.dp))
             Button(
                 onClick = onScan,
@@ -859,7 +863,7 @@ private fun EmptyState(onScan: () -> Unit, onManual: () -> Unit) {
                 ),
                 shape = RoundedCornerShape(10.dp)
             ) {
-                Text("前往设置")
+                Text(stringResource(R.string.sessions_go_settings))
             }
         }
     }
@@ -886,13 +890,13 @@ private fun resolveSessionName(
     return sessionId
 }
 
-private fun formatAgo(ts: Long?): String {
+private fun formatAgo(ts: Long?, context: android.content.Context): String {
     if (ts == null) return ""
     val sec = (System.currentTimeMillis() - ts) / 1000
     return when {
-        sec < 5 -> "刚刚"
-        sec < 60 -> "${sec}秒前"
-        sec < 3600 -> "${sec / 60}分钟前"
-        else -> "${sec / 3600}小时前"
+        sec < 5 -> context.getString(R.string.time_just_now)
+        sec < 60 -> context.getString(R.string.time_seconds, sec)
+        sec < 3600 -> context.getString(R.string.time_minutes, sec / 60)
+        else -> context.getString(R.string.time_hours, sec / 3600)
     }
 }

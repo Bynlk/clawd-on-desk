@@ -7,6 +7,7 @@ import android.content.Intent
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.clawd.mobile.MainActivity
+import com.clawd.mobile.R
 import com.clawd.mobile.data.PrefsStore
 import com.clawd.mobile.data.SessionData
 
@@ -94,20 +95,24 @@ class StatusNotifier(private val context: Context, private val prefsStore: Prefs
     }
 
     private fun showCompletionNotification(sessionId: String, name: String) {
-        Log.d("StatusNotifier", "NOTIFY completion: $name 搞定啦")
-        sendNotification("done:$sessionId", "$name 搞定啦", "快来看看成果！")
+        val title = context.getString(R.string.notify_done_title, name)
+        val text = context.getString(R.string.notify_done_text)
+        Log.d("StatusNotifier", "NOTIFY completion: $title")
+        sendNotification("done:$sessionId", title, text)
     }
 
     private fun showFailureNotification(sessionId: String, name: String) {
-        Log.d("StatusNotifier", "NOTIFY failure: $name 出错了")
-        sendNotification("fail:$sessionId", "$name 任务失败", "来看看发生了什么？")
+        val title = context.getString(R.string.notify_fail_title, name)
+        val text = context.getString(R.string.notify_fail_text)
+        Log.d("StatusNotifier", "NOTIFY failure: $title")
+        sendNotification("fail:$sessionId", title, text)
     }
 
     private fun showAlertNotification(displayState: String, name: String) {
         val (alertTitle, alertText) = when (displayState) {
-            "attention" -> "$name 遇到麻烦了" to "来看看？"
-            "error" -> "$name 出错了" to "需要你关注一下"
-            "notification" -> "$name 需要你的审批" to "Claude 请求执行权限"
+            "attention" -> context.getString(R.string.notify_attention_title, name) to context.getString(R.string.notify_attention_text)
+            "error" -> context.getString(R.string.notify_error_title, name) to context.getString(R.string.notify_error_text)
+            "notification" -> context.getString(R.string.notify_approval_title, name) to context.getString(R.string.notify_approval_text)
             else -> return
         }
         Log.d("StatusNotifier", "NOTIFY alert: $alertTitle | $alertText")

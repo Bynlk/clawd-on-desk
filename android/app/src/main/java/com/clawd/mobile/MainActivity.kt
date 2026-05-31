@@ -24,11 +24,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.clawd.mobile.ui.components.ClawdIcons
+import com.clawd.mobile.R
 import com.clawd.mobile.ui.theme.*
 import com.clawd.mobile.ui.navigation.ClawdNavGraph
 
@@ -86,8 +88,8 @@ class MainActivity : ComponentActivity() {
             ) {
                 add(PermissionRequest(
                     Manifest.permission.POST_NOTIFICATIONS,
-                    "通知权限",
-                    "用于接收会话状态变化、权限审批请求等通知推送。关闭后将无法收到实时提醒。"
+                    getString(R.string.perm_notification_title),
+                    getString(R.string.perm_notification_desc)
                 ))
             }
             if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CAMERA)
@@ -95,8 +97,8 @@ class MainActivity : ComponentActivity() {
             ) {
                 add(PermissionRequest(
                     Manifest.permission.CAMERA,
-                    "摄像头权限",
-                    "用于扫描 PC 端显示的二维码，快速建立连接。仅在扫码时使用。"
+                    getString(R.string.perm_camera_title),
+                    getString(R.string.perm_camera_desc)
                 ))
             }
         }
@@ -282,7 +284,7 @@ private fun PermissionExplanationDialog(
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("跳过", color = ClawdMutedDark)
+                        Text(stringResource(R.string.action_skip), color = ClawdMutedDark)
                     }
                     Button(
                         onClick = onConfirm,
@@ -293,7 +295,7 @@ private fun PermissionExplanationDialog(
                         ),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("允许")
+                        Text(stringResource(R.string.action_allow))
                     }
                 }
             }
@@ -331,14 +333,14 @@ private fun OverlayPermissionDialog(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    "悬浮窗权限",
+                    stringResource(R.string.perm_overlay_title),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = ClawdTextDark
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    "用于显示桌宠悬浮窗，需要在系统设置中手动开启。",
+                    stringResource(R.string.perm_overlay_desc),
                     fontSize = 13.sp,
                     color = ClawdFaintDark,
                     lineHeight = 20.sp
@@ -353,7 +355,7 @@ private fun OverlayPermissionDialog(
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("跳过", color = ClawdMutedDark)
+                        Text(stringResource(R.string.action_skip), color = ClawdMutedDark)
                     }
                     Button(
                         onClick = onConfirm,
@@ -364,7 +366,7 @@ private fun OverlayPermissionDialog(
                         ),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("允许")
+                        Text(stringResource(R.string.action_allow))
                     }
                 }
             }
@@ -402,15 +404,14 @@ private fun BatteryOptimizationDialog(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    "后台保活权限",
+                    stringResource(R.string.perm_battery_title),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = ClawdTextDark
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    "为确保后台 SSE 连接不被系统杀死，请允许 Clawd Mobile 忽略电池优化。\n\n" +
-                        "国产手机（MIUI、ColorOS、EMUI 等）会强制关闭后台应用，此权限可避免 3 秒断连问题。",
+                    stringResource(R.string.perm_battery_desc),
                     fontSize = 13.sp,
                     color = ClawdFaintDark,
                     lineHeight = 20.sp
@@ -425,7 +426,7 @@ private fun BatteryOptimizationDialog(
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("跳过", color = ClawdMutedDark)
+                        Text(stringResource(R.string.action_skip), color = ClawdMutedDark)
                     }
                     Button(
                         onClick = onConfirm,
@@ -436,7 +437,7 @@ private fun BatteryOptimizationDialog(
                         ),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("允许")
+                        Text(stringResource(R.string.action_allow))
                     }
                 }
             }

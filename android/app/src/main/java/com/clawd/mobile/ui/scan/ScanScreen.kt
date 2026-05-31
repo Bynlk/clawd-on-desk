@@ -20,10 +20,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.clawd.mobile.R
 import com.clawd.mobile.data.ConnectionConfig
 import com.google.zxing.*
 import com.google.zxing.common.HybridBinarizer
@@ -54,10 +56,10 @@ fun ScanScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("扫码配对") },
+                title = { Text(stringResource(R.string.scan_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.settings_back))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -74,10 +76,10 @@ fun ScanScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("需要摄像头权限", color = Color.White, style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.scan_need_camera), color = Color.White, style = MaterialTheme.typography.titleMedium)
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(onClick = { launcher.launch(Manifest.permission.CAMERA) }) {
-                        Text("授予权限")
+                        Text(stringResource(R.string.scan_grant_camera))
                     }
                 }
             }
@@ -95,7 +97,7 @@ fun ScanScreen(
 
                 // Hint text
                 Text(
-                    "将 QR 码放入框内",
+                    stringResource(R.string.scan_qr_hint),
                     color = Color.White,
                     modifier = Modifier.align(Alignment.Center).offset(y = 160.dp)
                 )

@@ -7,8 +7,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.clawd.mobile.R
 import com.clawd.mobile.data.ConnectionConfig
 import com.clawd.mobile.data.PrefsStore
 
@@ -28,10 +30,10 @@ fun ManualScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("手动连接") },
+                title = { Text(stringResource(R.string.manual_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.settings_back))
                     }
                 }
             )
@@ -47,7 +49,7 @@ fun ManualScreen(
             OutlinedTextField(
                 value = host,
                 onValueChange = { host = it },
-                label = { Text("桌面端地址") },
+                label = { Text(stringResource(R.string.manual_host_label)) },
                 placeholder = { Text("192.168.1.10") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
@@ -56,7 +58,7 @@ fun ManualScreen(
             OutlinedTextField(
                 value = port,
                 onValueChange = { port = it },
-                label = { Text("端口") },
+                label = { Text(stringResource(R.string.manual_port_label)) },
                 placeholder = { Text("23334") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -67,14 +69,14 @@ fun ManualScreen(
                 value = token,
                 onValueChange = { token = it },
                 label = { Text("Token") },
-                placeholder = { Text("32位token") },
+                placeholder = { Text(stringResource(R.string.manual_token_placeholder)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
 
             if (showError) {
                 Text(
-                    "请填写完整连接信息",
+                    stringResource(R.string.manual_fill_required),
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -92,12 +94,12 @@ fun ManualScreen(
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("连接")
+                Text(stringResource(R.string.manual_connect))
             }
 
             if (history.value.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("连接历史", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.manual_history), style = MaterialTheme.typography.titleSmall)
                 history.value.forEachIndexed { index, config ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -109,13 +111,13 @@ fun ManualScreen(
                             modifier = Modifier.weight(1f)
                         )
                         TextButton(onClick = { onConnect(config) }) {
-                            Text("连接")
+                            Text(stringResource(R.string.manual_connect))
                         }
                         TextButton(onClick = {
                             prefsStore.removeFromHistory(index)
                             history.value = prefsStore.getHistory()
                         }) {
-                            Text("删除")
+                            Text(stringResource(R.string.manual_delete))
                         }
                     }
                 }

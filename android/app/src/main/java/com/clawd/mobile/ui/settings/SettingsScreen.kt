@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -33,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.clawd.mobile.R
 import com.clawd.mobile.data.PrefsStore
 import com.clawd.mobile.ui.components.ClawdIcons
 import com.clawd.mobile.ui.theme.*
@@ -69,7 +71,7 @@ fun SettingsScreen(
 
             // Accordion sections
             AccordionSection(
-                title = "扫码连接",
+                title = stringResource(R.string.settings_scan_connect),
                 icon = ClawdIcons.QrCode,
                 defaultExpanded = false
             ) {
@@ -77,7 +79,7 @@ fun SettingsScreen(
             }
 
             AccordionSection(
-                title = "手动连接",
+                title = stringResource(R.string.settings_manual_connect),
                 icon = ClawdIcons.DeviceDesktop,
                 defaultExpanded = false
             ) {
@@ -85,7 +87,7 @@ fun SettingsScreen(
             }
 
             AccordionSection(
-                title = "通知设置",
+                title = stringResource(R.string.settings_notification),
                 icon = ClawdIcons.Bell,
                 defaultExpanded = false
             ) {
@@ -93,7 +95,7 @@ fun SettingsScreen(
             }
 
             AccordionSection(
-                title = "桌宠",
+                title = stringResource(R.string.settings_pet),
                 icon = ClawdIcons.Pet,
                 defaultExpanded = false
             ) {
@@ -101,7 +103,7 @@ fun SettingsScreen(
             }
 
             AccordionSection(
-                title = "关于",
+                title = stringResource(R.string.settings_about),
                 icon = ClawdIcons.Activity,
                 defaultExpanded = false
             ) {
@@ -125,13 +127,13 @@ private fun SettingsTopBar(onBack: () -> Unit) {
         IconButton(onClick = onBack) {
             Icon(
                 ClawdIcons.ChevronRight,
-                "返回",
+                stringResource(R.string.settings_back),
                 tint = ClawdMutedDark,
                 modifier = Modifier.size(20.dp)
             )
         }
         Text(
-            "设置",
+            stringResource(R.string.settings_title),
             fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold,
             color = ClawdTextDark
@@ -164,7 +166,7 @@ private fun ConnectionInfoCard(webSocket: ClawdWebSocket) {
                         .background(ClawdGreenBright)
                 )
                 Text(
-                    "已连接",
+                    stringResource(R.string.status_connected),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = ClawdGreenBright,
@@ -172,8 +174,8 @@ private fun ConnectionInfoCard(webSocket: ClawdWebSocket) {
                 )
             }
             Spacer(modifier = Modifier.height(10.dp))
-            CopyableRow("IP 地址", host) { clipboard.setText(AnnotatedString(host)) }
-            CopyableRow("端口", port) { clipboard.setText(AnnotatedString(port)) }
+            CopyableRow(stringResource(R.string.settings_ip_address), host) { clipboard.setText(AnnotatedString(host)) }
+            CopyableRow(stringResource(R.string.settings_port), port) { clipboard.setText(AnnotatedString(port)) }
         }
     }
 }
@@ -278,7 +280,7 @@ private fun AccordionSection(
 @Composable
 private fun ScanSection(onScan: () -> Unit) {
     Text(
-        "扫描 PC 端显示的二维码，自动建立连接。",
+        stringResource(R.string.settings_scan_desc),
         fontSize = 12.sp,
         color = ClawdFaintDark,
         modifier = Modifier.padding(bottom = 12.dp)
@@ -294,7 +296,7 @@ private fun ScanSection(onScan: () -> Unit) {
     ) {
         Icon(ClawdIcons.QrCode, null, modifier = Modifier.size(18.dp))
         Spacer(modifier = Modifier.width(8.dp))
-        Text("打开扫码")
+        Text(stringResource(R.string.settings_scan_open))
     }
 }
 
@@ -303,7 +305,7 @@ private fun ScanSection(onScan: () -> Unit) {
 @Composable
 private fun ManualSection(onManual: () -> Unit) {
     Text(
-        "手动输入 PC 端的 IP 地址、端口和 Token 进行连接。",
+        stringResource(R.string.settings_manual_desc),
         fontSize = 12.sp,
         color = ClawdFaintDark,
         modifier = Modifier.padding(bottom = 12.dp)
@@ -314,7 +316,7 @@ private fun ManualSection(onManual: () -> Unit) {
         shape = RoundedCornerShape(10.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Text("手动输入连接", color = ClawdMutedDark)
+        Text(stringResource(R.string.settings_manual_open), color = ClawdMutedDark)
     }
 }
 
@@ -327,22 +329,22 @@ private fun NotificationSection(prefsStore: PrefsStore) {
     var status by remember { mutableStateOf(prefsStore.isNotifyStatus()) }
     var alert by remember { mutableStateOf(prefsStore.isNotifyAlert()) }
     Text(
-        "控制 App 各类通知的开关。关闭后将不再收到对应类型的通知推送。",
+        stringResource(R.string.settings_notification_desc),
         fontSize = 12.sp,
         color = ClawdFaintDark,
         modifier = Modifier.padding(bottom = 12.dp)
     )
 
-    NotifyToggle("通知总开关", "启用后 App 可发送通知", enabled) {
+    NotifyToggle(stringResource(R.string.settings_notify_master), stringResource(R.string.settings_notify_master_desc), enabled) {
         enabled = it; prefsStore.setNotifyEnabled(it)
     }
-    NotifyToggle("权限审批通知", "Claude 请求执行权限时通知你", approval && enabled, enabled) {
+    NotifyToggle(stringResource(R.string.settings_notify_approval), stringResource(R.string.settings_notify_approval_desc), approval && enabled, enabled) {
         approval = it; prefsStore.setNotifyApproval(it)
     }
-    NotifyToggle("会话状态通知", "会话状态变化（完成、错误等）时通知", status && enabled, enabled) {
+    NotifyToggle(stringResource(R.string.settings_notify_status), stringResource(R.string.settings_notify_status_desc), status && enabled, enabled) {
         status = it; prefsStore.setNotifyStatus(it)
     }
-    NotifyToggle("告警通知", "需要立即关注的事件通知", alert && enabled, enabled) {
+    NotifyToggle(stringResource(R.string.settings_notify_alert), stringResource(R.string.settings_notify_alert_desc), alert && enabled, enabled) {
         alert = it; prefsStore.setNotifyAlert(it)
     }
 
@@ -361,7 +363,7 @@ private fun FloatingPetSection(prefsStore: PrefsStore) {
     var character by remember { mutableStateOf(petPrefs.getString("pet_character", "clawd") ?: "clawd") }
 
     Text(
-        "在屏幕上显示一个可爱的桌宠小螃蟹。",
+        stringResource(R.string.settings_pet_desc),
         fontSize = 12.sp,
         color = ClawdFaintDark,
         modifier = Modifier.padding(bottom = 12.dp)
@@ -375,9 +377,9 @@ private fun FloatingPetSection(prefsStore: PrefsStore) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text("启用桌宠", fontSize = 13.sp, color = ClawdTextDark)
+            Text(stringResource(R.string.settings_pet_enable), fontSize = 13.sp, color = ClawdTextDark)
             Text(
-                if (hasOverlayPermission) "需要悬浮窗权限（已授予）" else "需要悬浮窗权限（未授予）",
+                if (hasOverlayPermission) stringResource(R.string.settings_pet_overlay_granted) else stringResource(R.string.settings_pet_overlay_needed),
                 fontSize = 11.sp,
                 color = if (hasOverlayPermission) ClawdGreenBright else ClawdFaintDark
             )
@@ -430,7 +432,7 @@ private fun FloatingPetSection(prefsStore: PrefsStore) {
             shape = RoundedCornerShape(10.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("断开连接并关闭桌宠", color = ClawdFaintDark, fontSize = 13.sp)
+            Text(stringResource(R.string.settings_disconnect), color = ClawdFaintDark, fontSize = 13.sp)
         }
     }
 
@@ -440,7 +442,7 @@ private fun FloatingPetSection(prefsStore: PrefsStore) {
         var sizeText by remember { mutableStateOf(sizeDp.toString()) }
 
         // Size slider + input field
-        Text("大小", fontSize = 13.sp, color = ClawdTextDark)
+        Text(stringResource(R.string.settings_pet_size), fontSize = 13.sp, color = ClawdTextDark)
         Spacer(modifier = Modifier.height(4.dp))
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -508,7 +510,7 @@ private fun FloatingPetSection(prefsStore: PrefsStore) {
 
         // Character selector
         Spacer(modifier = Modifier.height(8.dp))
-        Text("角色", fontSize = 13.sp, color = ClawdTextDark)
+        Text(stringResource(R.string.settings_pet_character), fontSize = 13.sp, color = ClawdTextDark)
         Spacer(modifier = Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("clawd" to "Clawd", "calico" to "Calico", "cloudling" to "Cloudling").forEach { (key, label) ->
@@ -579,7 +581,7 @@ private fun AboutSection() {
     val context = LocalContext.current
 
     Text(
-        "陪你 AI 编码的移动端伙伴。",
+        stringResource(R.string.about_subtitle),
         fontSize = 14.sp,
         fontWeight = FontWeight.Medium,
         color = ClawdTextDark,
@@ -597,13 +599,13 @@ private fun AboutSection() {
     } catch (_: Exception) {
         "?"
     }
-    AboutRow("版本", "v$versionName")
-    AboutRow("代码仓库", "https://github.com/rullerzhou-afk/clawd-on-desk")
-    AboutRow("Fork 仓库", "https://github.com/Bynlk/clawd-on-desk")
-    AboutRow("开源协议", "AGPL-3.0 · © 2026 Ruller_Lulu")
-    AboutRow("原作者", "Ruller_Lulu / 鹿鹿")
-    AboutRow("维护者", "@rullerzhou-afk, @YOIMIYA66")
-    AboutRow("移动端维护者", "@Bynlk")
+    AboutRow(stringResource(R.string.about_version), "v$versionName")
+    AboutRow(stringResource(R.string.about_repo), "https://github.com/rullerzhou-afk/clawd-on-desk")
+    AboutRow(stringResource(R.string.about_fork), "https://github.com/Bynlk/clawd-on-desk")
+    AboutRow(stringResource(R.string.about_license), "AGPL-3.0 · © 2026 Ruller_Lulu")
+    AboutRow(stringResource(R.string.about_author), stringResource(R.string.about_author_name))
+    AboutRow(stringResource(R.string.about_maintainer), "@rullerzhou-afk, @YOIMIYA66")
+    AboutRow(stringResource(R.string.about_mobile_maintainer), "@Bynlk")
 
     Spacer(modifier = Modifier.height(12.dp))
     OutlinedButton(
@@ -617,7 +619,7 @@ private fun AboutSection() {
     ) {
         Icon(ClawdIcons.Refresh, null, modifier = Modifier.size(16.dp), tint = ClawdMutedDark)
         Spacer(modifier = Modifier.width(6.dp))
-        Text("检查更新", color = ClawdMutedDark)
+        Text(stringResource(R.string.about_check_update), color = ClawdMutedDark)
     }
 }
 

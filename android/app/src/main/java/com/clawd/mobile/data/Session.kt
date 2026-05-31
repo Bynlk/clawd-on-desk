@@ -1,6 +1,8 @@
 package com.clawd.mobile.data
 
+import android.content.Context
 import androidx.compose.ui.graphics.Color
+import com.clawd.mobile.R
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -54,20 +56,20 @@ data class Session(
             "idle" to 6, "sleeping" to 7
         )
 
-        /** Map event names to user-visible Chinese labels */
-        fun eventLabel(eventName: String?): String = when (eventName) {
-            "UserPromptSubmit" -> "用户输入"
-            "PreToolUse" -> "工具启动"
-            "PostToolUse" -> "工具完成"
-            "PostToolUseFailure" -> "工具失败"
-            "Stop" -> "已完成"
-            "SessionStart" -> "会话开始"
-            "SessionEnd" -> "会话结束"
-            "PermissionRequest" -> "需要权限"
-            "Elicitation" -> "需要选择"
-            "Notification" -> "通知"
-            "SubagentStart" -> "子代理启动"
-            "SubagentStop" -> "子代理停止"
+        /** Map event names to user-visible labels via string resources. */
+        fun eventLabel(eventName: String?, context: Context): String = when (eventName) {
+            "UserPromptSubmit" -> context.getString(R.string.event_user_prompt)
+            "PreToolUse" -> context.getString(R.string.event_pre_tool)
+            "PostToolUse" -> context.getString(R.string.event_post_tool)
+            "PostToolUseFailure" -> context.getString(R.string.event_post_tool_fail)
+            "Stop" -> context.getString(R.string.event_stop)
+            "SessionStart" -> context.getString(R.string.event_session_start)
+            "SessionEnd" -> context.getString(R.string.event_session_end)
+            "PermissionRequest" -> context.getString(R.string.event_permission)
+            "Elicitation" -> context.getString(R.string.event_elicitation)
+            "Notification" -> context.getString(R.string.event_notification)
+            "SubagentStart" -> context.getString(R.string.event_subagent_start)
+            "SubagentStop" -> context.getString(R.string.event_subagent_stop)
             else -> eventName ?: ""
         }
     }
